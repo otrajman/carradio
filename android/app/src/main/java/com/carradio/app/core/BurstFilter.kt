@@ -57,7 +57,8 @@ class BurstFilter(
     /**
      * Evaluate one incoming burst against the receiver state.
      *
-     * @param elasticMode PROTOCOL §7: skip the heading check and treat senderRadius as infinite.
+     * @param elasticMode PROTOCOL §7: skip all directional/distance gating (self/dedupe/mute
+     *                    still apply); reach is bounded by the subscribed rooms.
      * @param recordSeen  when true (live bursts) the message id is added to the dedupe LRU.
      */
     fun evaluate(
@@ -99,6 +100,10 @@ class BurstFilter(
             if (dot < HEADING_DOT_THRESHOLD) return Decision.DROP_HEADING
         }
 
+        // §7: elastic mode drops all directional/distance gating — reach is bounded by
+        // the subscribed rooms themselves. Matches PWA and iOS.
+        if (elasticMode) return Decision.PLAY
+
         // 5. Distance / forward cone (asymmetric, sender-owned cone)
         val d = GeoMath.haversineMeters(burst.lat, burst.lng, receiver.lat, receiver.lng)
         if (d <= NEAR_BUBBLE_METERS) return Decision.PLAY
@@ -108,8 +113,7 @@ class BurstFilter(
         val aheadDot = kotlin.math.cos(GeoMath.degToRad(bearing - burst.heading))
         if (aheadDot < AHEAD_DOT_THRESHOLD) return Decision.DROP_DISTANCE
 
-        val radius = if (elasticMode) Double.MAX_VALUE else GeoMath.senderRadiusMeters(burst.speed)
-        if (d > radius) return Decision.DROP_DISTANCE
+        if (d > GeoMath.senderRadiusMeters(burst.speed)) return Decision.DROP_DISTANCE
 
         return Decision.PLAY
     }

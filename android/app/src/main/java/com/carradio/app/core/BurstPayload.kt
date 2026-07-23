@@ -1,5 +1,6 @@
 package com.carradio.app.core
 
+import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -32,10 +33,11 @@ data class BurstPayload(
         const val KIND_VOICE = "voice"
         const val KIND_SYSTEM = "system"
 
+        @OptIn(ExperimentalSerializationApi::class)
         val json: Json = Json {
             ignoreUnknownKeys = true
             encodeDefaults = true
-            explicitNulls = true
+            explicitNulls = true // wire payloads carry explicit "audio_path": null / "text": null
         }
 
         fun decodeOrNull(raw: String): BurstPayload? = try {

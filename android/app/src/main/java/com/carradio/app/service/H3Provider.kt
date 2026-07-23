@@ -55,13 +55,14 @@ object H3Provider {
     }
 
     private fun load(): H3Core? {
-        val archCandidates = Build.SUPPORTED_ABIS.orEmpty().flatMap { abi ->
+        // The h3-4.1.1 jar bundles exactly two Android natives: /android-arm64/ and
+        // /android-arm/ (verified against the Maven Central artifact). x86/x86_64 emulator
+        // images have no Android natives and will fall through to degraded mode.
+        val archCandidates = Build.SUPPORTED_ABIS.orEmpty().mapNotNull { abi ->
             when (abi) {
-                "arm64-v8a" -> listOf("arm64", "aarch64")
-                "armeabi-v7a" -> listOf("armv7l", "armv7", "arm")
-                "x86_64" -> listOf("x64", "x86_64")
-                "x86" -> listOf("x86")
-                else -> emptyList()
+                "arm64-v8a" -> "arm64"
+                "armeabi-v7a" -> "arm"
+                else -> null
             }
         }.distinct()
         for (arch in archCandidates) {

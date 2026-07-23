@@ -55,8 +55,6 @@ dependencies {
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.lifecycle.runtime.compose)
-    implementation(libs.androidx.lifecycle.service)
-    implementation(libs.androidx.navigation.compose)
     implementation(libs.androidx.datastore.preferences)
 
     val composeBom = platform(libs.compose.bom)

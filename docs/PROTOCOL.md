@@ -120,8 +120,9 @@ Let S = sender fields from payload, R = receiver's current GPS state.
 ## 7. Elastic mode (density fallback)
 
 - If, for **3 minutes**, presence across subscribed rooms shows 0 other non-system members
-  AND no bursts passed the filter: enter elastic mode — skip the heading check (§5.4) and
-  treat `senderRadius` as ∞ within subscribed rooms (~2.4 km reach; regional).
+  AND no bursts passed the filter: enter elastic mode — skip §5.4 **and §5.5 entirely**
+  (no heading, ahead-of-sender, or distance gating; self/dedupe/mute still apply). Reach is
+  bounded only by the subscribed rooms (~2.4 km+; regional).
 - Exit elastic mode immediately when any burst passes the strict filter or presence shows
   ≥ 2 peers.
 
