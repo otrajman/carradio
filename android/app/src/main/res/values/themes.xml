@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Dark-only, per PROTOCOL §13. Compose draws everything; this just kills the action bar
+         and keeps the window black so there is never a white flash while driving at night. -->
+    <style name="Theme.CarRadio" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@android:color/black</item>
+        <item name="android:statusBarColor">@android:color/black</item>
+        <item name="android:navigationBarColor">@android:color/black</item>
+    </style>
+</resources>

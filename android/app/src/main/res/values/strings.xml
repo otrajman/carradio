@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Car Radio</string>
+    <string name="notification_channel_name">Car Radio live session</string>
+    <string name="notification_title">Car Radio — on air</string>
+    <string name="notification_talk">Talk</string>
+    <string name="notification_skip">Skip / Mute</string>
+    <string name="notification_stop">Go off air</string>
+</resources>

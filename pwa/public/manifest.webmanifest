@@ -1,0 +1,13 @@
+{
+  "name": "Car Radio",
+  "short_name": "Car Radio",
+  "description": "Same-traffic voice. Eyes up, hands on the wheel.",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#07090b",
+  "theme_color": "#07090b",
+  "icons": [
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}
