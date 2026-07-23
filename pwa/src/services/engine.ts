@@ -206,6 +206,9 @@ export class RadioEngine {
     ch.on("broadcast", { event: "burst" }, ({ payload }) => {
       this.onBurst(payload as BurstPayload, false);
     });
+    // presence listener required — Realtime only sends presence events to
+    // clients that register interest
+    ch.on("presence", { event: "sync" }, () => this.publish());
     ch.subscribe();
     return ch;
   }
@@ -253,6 +256,7 @@ export class RadioEngine {
       },
     );
     this.markSeen(p.message_id);
+    if (reason === "duplicate") return; // fan-out echo; protocol-internal, not worth logging
     const dist =
       this.fix ? Math.round(haversineM(p.lat, p.lng, this.fix.lat, this.fix.lng)) : null;
     this.events.push({
