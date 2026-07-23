@@ -107,8 +107,9 @@ Let S = sender fields from payload, R = receiver's current GPS state.
 ## 6. Breadcrumbs (cold start)
 
 - On every res-8 cell change (finer cadence than rooms), call RPC:
-  `get_breadcrumbs(p_lat, p_lng, p_radius_m, p_heading, p_since_hours := 24, p_limit := 10)`
-  with `p_radius_m = max(1600, senderRadius(R.speed))`.
+  `get_breadcrumbs(p_trip_id, p_lat, p_lng, p_radius_m, p_since_hours := 24, p_limit := 10)`
+  with `p_radius_m = max(1600, senderRadius(R.speed))`. (Heading is not a parameter —
+  directional filtering happens client-side in §5, same as live bursts.)
 - The RPC returns recent messages ordered newest-first, already excluding the caller's trip.
 - Client keeps a persistent played-ids set (survives app restart, capped at 2000); plays
   unheard breadcrumbs through the same filter as §5 **minus the age drop**, at most one
