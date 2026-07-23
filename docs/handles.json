@@ -1,0 +1,14 @@
+{
+  "adjectives": [
+    "Neon", "Crimson", "Silver", "Cobalt", "Amber", "Turbo", "Midnight", "Solar",
+    "Electric", "Copper", "Ivory", "Onyx", "Scarlet", "Golden", "Azure", "Emerald",
+    "Velvet", "Chrome", "Shadow", "Blazing", "Frost", "Thunder", "Drift", "Radiant",
+    "Lucky", "Rusty", "Swift", "Quiet", "Wild", "Nova", "Retro", "Phantom"
+  ],
+  "animals": [
+    "Falcon", "Otter", "Lynx", "Bison", "Coyote", "Heron", "Marlin", "Puma",
+    "Raven", "Stallion", "Badger", "Condor", "Dingo", "Elk", "Fox", "Gazelle",
+    "Hawk", "Ibex", "Jaguar", "Kestrel", "Llama", "Moose", "Narwhal", "Osprey",
+    "Panther", "Quail", "Rhino", "Sparrow", "Tiger", "Viper", "Wolf", "Wombat"
+  ]
+}

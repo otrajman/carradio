@@ -1,0 +1,183 @@
+# Car Radio — Shared Client Protocol (v1)
+
+Every client (PWA, Android, iOS) MUST implement this protocol identically. This document is
+the source of truth for wire formats and filter math. If a client deviates, cross-platform
+delivery breaks silently.
+
+## 0. Deviations from the PRD (judgment calls, v1 free tier)
+
+| PRD says | v1 does | Why |
+|---|---|---|
+| H3 res 9/10 rooms, k-ring 1 | **Rooms at H3 res 7**; res 9 stored per-message for breadcrumbs | Res 9 + k-ring 1 gives ~400 m of reach, which contradicts the 3-mile forward cone. Res 7 cells (~2.4 km across) with k-ring 1 subscribe + forward fan-out publish cover the 3-mile cone with ≤7 subscriptions and ≤4 publishes. |
+| Mapbox/Valhalla road snapping | Skipped (feature-flagged off) | No free tier without keys. Heading + dynamic radius filtering only. |
+| Porcupine wake word | Web Speech API (PWA), SFSpeechRecognizer (iOS), SpeechRecognizer (Android) behind a `wakeword` feature flag | No Picovoice key. Same trigger phrase: "hey radio". |
+| OpenAI LLM + ElevenLabs TTS for synthetic nodes | Template-based script formatting in an Edge Function + **client-side OS TTS** | Free. Synthetic messages carry `text`; clients synthesize locally. |
+| Server drops packets for mutes | Client-side drop | Broadcasts are client-fired peer fan-out; there is no server hop to filter at. Mutes are stored in DB + cached locally; receiver drops on arrival. |
+
+## 1. Identity
+
+- On every app launch (or after 4 h idle) the client creates a new **trip**:
+  `INSERT INTO trips (phonetic_handle) ... RETURNING id`.
+- `phonetic_handle` is generated **locally**: `<Adjective> <Animal>` from the fixed word
+  lists in `docs/handles.json` (identical across platforms). Example: "Neon Falcon".
+- `trip_id` (UUID) is the only identity ever put on the wire. Never send device ids,
+  user ids, or names.
+
+## 2. Units & conventions
+
+- **Speed: meters/second** everywhere on the wire and in the DB. Convert to mph only in UI.
+- **Heading: degrees clockwise from true north, [0, 360).**
+- Coordinates: WGS84 lat/lng, decimal degrees.
+- Timestamps: ISO-8601 UTC strings.
+- H3 indexes: lowercase hex strings (h3-js / h3 native canonical form).
+
+## 3. Realtime rooms (Supabase Realtime Broadcast)
+
+- Room name: `room:<h3_res7_index>` e.g. `room:872a1008bffffff`.
+- Channels are **public broadcast** channels (`broadcast: { self: false, ack: false }`).
+- **Subscribe set** (receiver): `gridDisk(myCell_res7, 1)` → 7 channels. Recompute on every
+  res-7 cell change; unsubscribe channels that left the set.
+- **Publish set** (sender): own res-7 cell + the res-7 cells intersecting the forward ray:
+  take points at 1.2 km intervals along the sender's heading out to
+  `senderRadius(speed)` (see §5), convert each to res-7, dedupe, cap at 4 cells.
+- **Presence**: each client tracks presence on its *own* cell's channel only, with payload
+  `{ trip_id, handle, heading, speed, kind }` throttled to one update / 10 s. Used for the
+  density radar and elastic-radius fallback. Never write live location to Postgres.
+
+### Broadcast event
+
+Event name: `burst`. Payload (JSON):
+
+```json
+{
+  "v": 1,
+  "message_id": "uuid",
+  "trip_id": "uuid",
+  "handle": "Neon Falcon",
+  "kind": "voice",              // "voice" | "system"
+  "audio_path": "voice_bursts/<trip_id>/<message_id>.webm",  // null for system/text bursts
+  "text": null,                  // non-null for system bursts (client TTS) or bot bursts
+  "lat": 37.7749,
+  "lng": -122.4194,
+  "heading": 271.5,
+  "speed": 29.1,                 // m/s
+  "h3_r9": "892a100acafffff",
+  "created_at": "2026-07-23T05:12:00.000Z"
+}
+```
+
+`audio_path` is a path inside the public `voice_bursts` storage bucket; full URL =
+`<SUPABASE_URL>/storage/v1/object/public/<audio_path>`.
+
+## 4. Send pipeline (in order)
+
+1. Check own shadowban: `SELECT is_shadowbanned(my_trip_id)`. If true, **pretend to send**
+   (play the sent earcon, skip steps 2–4). Cache result for 60 s.
+2. Upload audio to Storage: bucket `voice_bursts`, path `<trip_id>/<message_id>.webm`
+   (PWA: `audio/webm;codecs=opus`; Android: `.ogg` opus; iOS: `.m4a` AAC — set the path
+   extension to match, receivers play by URL and don't care).
+3. `INSERT INTO messages (id, trip_id, kind, audio_path, text, h3_r9, location, heading, speed)`
+   — this is the breadcrumb.
+4. Broadcast the `burst` event to every room in the publish set (§3).
+
+Target audio: ≤ 10 s per burst, mono, ~24 kbps opus (or AAC-HE on iOS).
+
+## 5. Receive filter (run locally on every incoming burst, in order)
+
+Let S = sender fields from payload, R = receiver's current GPS state.
+
+1. **Self**: drop if `S.trip_id == R.trip_id`.
+2. **Dedupe**: drop if `message_id` already seen (senders fan out to multiple rooms; keep an
+   LRU of ~200 ids).
+3. **Mute**: drop if `S.trip_id` is in the local mute set.
+4. **Heading match**: `dot = sin(Sh)·sin(Rh) + cos(Sh)·cos(Rh)` (headings in radians).
+   Drop if `dot < 0.85` (±31.8°). Skip this check when receiver speed < 3 m/s (parked/jam
+   creep — heading is noise) or in elastic mode (§7). System bursts (`kind=system`) skip it too.
+5. **Distance / forward cone** (asymmetric, sender-owned cone):
+   - `d` = haversine(S, R) meters.
+   - `senderRadius(v_mps)`: convert to mph; `miles = 0.5 + (mph − 15) × (2.5 / 60)`,
+     clamped to [0.5, 3.0]; radius = miles × 1609.34. (15 mph → 0.5 mi, 75 mph → 3 mi.)
+   - If `d ≤ 800` m: pass (omnidirectional near-bubble).
+   - Else: receiver must be **ahead of the sender**: bearing β from S to R;
+     `aheadDot = cos(radians(β − S.heading))`. Pass iff `aheadDot ≥ 0.5` (±60°) and
+     `d ≤ senderRadius(S.speed)`. Otherwise drop.
+6. **Play queue**: enqueue FIFO; never overlap two bursts; drop bursts older than 60 s at
+   dequeue time (except breadcrumbs, §6).
+
+## 6. Breadcrumbs (cold start)
+
+- On every res-8 cell change (finer cadence than rooms), call RPC:
+  `get_breadcrumbs(p_lat, p_lng, p_radius_m, p_heading, p_since_hours := 24, p_limit := 10)`
+  with `p_radius_m = max(1600, senderRadius(R.speed))`.
+- The RPC returns recent messages ordered newest-first, already excluding the caller's trip.
+- Client keeps a persistent played-ids set (survives app restart, capped at 2000); plays
+  unheard breadcrumbs through the same filter as §5 **minus the age drop**, at most one
+  breadcrumb per 45 s so live traffic wins.
+- Announce with the breadcrumb earcon; prefix system TTS with "Earlier here: " when the
+  breadcrumb is > 1 h old.
+
+## 7. Elastic mode (density fallback)
+
+- If, for **3 minutes**, presence across subscribed rooms shows 0 other non-system members
+  AND no bursts passed the filter: enter elastic mode — skip the heading check (§5.4) and
+  treat `senderRadius` as ∞ within subscribed rooms (~2.4 km reach; regional).
+- Exit elastic mode immediately when any burst passes the strict filter or presence shows
+  ≥ 2 peers.
+
+## 8. Mute / moderation
+
+- Skip gesture (swipe down / Next-Track): stop current audio, add `S.trip_id` to the local
+  mute set (persists for the receiver's trip), and
+  `INSERT INTO mute_events (muter_trip_id, muted_trip_id)`.
+- A DB trigger applies the shadowban rule (3 distinct muters / 5 min → banned 1 h). Clients
+  never implement the rule; they only call `is_shadowbanned` (§4.1).
+- The sender is NEVER notified. No UI ever reveals mute status.
+
+## 9. Earcons
+
+All clients implement the same five cues (synthesized locally, no assets required):
+
+| Cue | Sound | Spec |
+|---|---|---|
+| incoming | soft "pop" | 60 ms sine burst 880→440 Hz, panned slightly forward/center |
+| mic open | "bloop-bleep" | two 80 ms sines, 520 Hz then 780 Hz |
+| sent | "whoosh" | 300 ms filtered noise sweep 2 kHz→300 Hz, fading |
+| muted | low "click" | 30 ms sine at 180 Hz |
+| system | triple-chime | three 90 ms sines 660/830/990 Hz, 70 ms gaps — always precedes `kind=system` playback |
+| breadcrumb | double "pop" | incoming pop twice, 120 ms apart |
+
+## 10. Audio session behavior
+
+- Duck other audio (music/nav) to ~30 % while playing a burst or recording; restore after.
+  - iOS: `AVAudioSession` category `.playback`, option `.duckOthers` (+ `.interruptSpokenAudioAndMixWithOthers`).
+  - Android: `AudioFocusRequest` with `AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK`.
+  - PWA: cannot duck other apps; just play (documented limitation).
+- Register as a media session ("Car Radio — live") so steering wheel / headset buttons route in:
+  - **Play/Pause** → push-to-talk toggle (start/stop recording).
+  - **Next Track** → skip current burst + stealth-mute its sender.
+
+## 11. Feature flags / env
+
+Clients read a config (env vars for PWA, BuildConfig/xcconfig for native):
+
+```
+SUPABASE_URL, SUPABASE_ANON_KEY        # required
+FEATURE_WAKEWORD=true|false            # default true where OS speech API exists
+FEATURE_ROAD_SNAP=false                # reserved; no-op in v1
+SYNTHETIC_NODES=true|false             # call synthetic-nodes edge function on cell change
+```
+
+## 12. Synthetic nodes
+
+- Edge Function `synthetic-nodes` (POST `{ lat, lng }`) checks NWS alerts (api.weather.gov)
+  and Wikipedia GeoSearch (both keyless), templates conversational scripts, inserts them as
+  `kind=system` breadcrumb messages (deduped per cell per 6 h), and returns them.
+- Clients with `SYNTHETIC_NODES=true` call it at most once per res-7 cell per session, play
+  returned scripts via local TTS (triple-chime first). Everyone else picks them up via
+  breadcrumbs.
+
+## 13. Drive Mode lock
+
+When GPS speed > 4.5 m/s (~10 mph) for 5 s, the phone UI locks to Drive Mode: full-screen
+tap-to-talk, swipe-down skip/mute, no lists, no keyboards, dark only. Unlocks after
+speed < 2 m/s for 30 s or via a deliberate "I'm a passenger" long-press (8 s).
