@@ -132,7 +132,7 @@ private struct PassengerChip: View {
         Text(holding ? "KEEP HOLDING…" : "PASSENGER? HOLD 8 S")
             .font(.system(size: 11, weight: .semibold, design: .rounded))
             .kerning(1)
-            .foregroundStyle(holding ? .orange : .tertiary)
+            .foregroundStyle(holding ? Color.orange : Color.white.opacity(0.35))
             .padding(.horizontal, 14)
             .padding(.vertical, 8)
             .background(Capsule().stroke(Color.white.opacity(0.15)))
