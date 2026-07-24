@@ -1,0 +1,53 @@
+name: Play — internal testing upload
+
+on:
+  push:
+    branches: [main]
+    paths: ["android/**", ".github/workflows/play-beta.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  aab:
+    runs-on: ubuntu-latest
+    defaults:
+      run: { working-directory: android }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: 17 }
+      - uses: gradle/actions/setup-gradle@v3
+        with: { gradle-version: "8.9" }
+      - name: Restore upload keystore
+        run: |
+          mkdir -p ../.secrets
+          echo "${{ secrets.UPLOAD_KEYSTORE_BASE64 }}" | base64 -d > ../.secrets/upload.keystore
+      - name: Build signed release AAB
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          VERSION_CODE: ${{ github.run_number }}
+          VERSION_NAME: 0.1.${{ github.run_number }}
+        run: gradle --no-daemon bundleRelease
+      - uses: actions/upload-artifact@v4
+        with: { name: carradio-release-aab, path: android/app/build/outputs/bundle/release/app-release.aab }
+      - name: Attach AAB to latest-builds
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp app/build/outputs/bundle/release/app-release.aab carradio-release.aab
+          gh release upload latest-builds carradio-release.aab --clobber || true
+      - name: Upload to Play internal track
+        # No-op until the PLAY_SERVICE_ACCOUNT_JSON secret is added (see README).
+        if: ${{ env.HAVE_PLAY_KEY == 'true' }}
+        uses: r0adkll/upload-google-play@v1.1.3
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+          packageName: com.carradio.app
+          releaseFiles: android/app/build/outputs/bundle/release/app-release.aab
+          track: internal
+          status: completed
+    env:
+      HAVE_PLAY_KEY: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON != '' }}

@@ -6,14 +6,33 @@ plugins {
 
 android {
     namespace = "com.carradio.app"
-    compileSdk = 34
+    compileSdk = 35
 
     defaultConfig {
         applicationId = "com.carradio.app"
         minSdk = 29
-        targetSdk = 34
-        versionCode = 1
-        versionName = "1.0"
+        targetSdk = 35
+        // CI passes the run number so every Play upload has a fresh versionCode.
+        versionCode = (System.getenv("VERSION_CODE") ?: "1").toInt()
+        versionName = System.getenv("VERSION_NAME") ?: "0.1.0"
+    }
+
+    // Play upload signing. Keystore path/passwords come from env (CI secrets) or
+    // ~/.carradio/upload.keystore locally; falls back to unsigned for plain builds.
+    val uploadKeystore = System.getenv("UPLOAD_KEYSTORE_PATH")
+        ?: "${rootDir.parentFile}/.secrets/upload.keystore"
+    val haveUploadKey = file(uploadKeystore).exists() &&
+        System.getenv("KEYSTORE_PASSWORD") != null
+
+    signingConfigs {
+        if (haveUploadKey) {
+            create("upload") {
+                storeFile = file(uploadKeystore)
+                storePassword = System.getenv("KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("KEY_ALIAS") ?: "upload"
+                keyPassword = System.getenv("KEY_PASSWORD") ?: System.getenv("KEYSTORE_PASSWORD")
+            }
+        }
     }
 
     buildTypes {
@@ -23,6 +42,9 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            if (haveUploadKey) {
+                signingConfig = signingConfigs.getByName("upload")
+            }
         }
     }
 
