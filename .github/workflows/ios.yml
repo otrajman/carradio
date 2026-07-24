@@ -1,0 +1,55 @@
+name: iOS — build (macOS runner)
+
+on:
+  push:
+    branches: [main]
+    paths: ["ios/**", ".github/workflows/ios.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: macos-14
+    defaults:
+      run: { working-directory: ios }
+    steps:
+      - uses: actions/checkout@v4
+      - run: brew install xcodegen
+      - run: xcodegen generate
+      - name: Build (simulator, no signing)
+        run: |
+          xcodebuild -project CarRadio.xcodeproj -scheme CarRadio \
+            -destination 'generic/platform=iOS Simulator' \
+            -configuration Debug build \
+            CODE_SIGNING_ALLOWED=NO | tail -40
+      - name: Unit tests (core)
+        continue-on-error: true
+        run: |
+          xcodebuild -project CarRadio.xcodeproj -scheme CarRadio \
+            -destination 'platform=iOS Simulator,name=iPhone 15' \
+            test CODE_SIGNING_ALLOWED=NO | tail -60
+      - name: Unsigned device build + ipa
+        continue-on-error: true
+        run: |
+          xcodebuild -project CarRadio.xcodeproj -scheme CarRadio \
+            -destination 'generic/platform=iOS' \
+            -configuration Release build \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
+            CONFIGURATION_BUILD_DIR=$PWD/build-device | tail -20
+          mkdir -p Payload && cp -R build-device/CarRadio.app Payload/
+          zip -qr carradio-ios-unsigned.ipa Payload
+      - uses: actions/upload-artifact@v4
+        if: hashFiles('ios/carradio-ios-unsigned.ipa') != ''
+        with: { name: carradio-ios-unsigned-ipa, path: ios/carradio-ios-unsigned.ipa }
+      - name: Update latest-builds release
+        if: hashFiles('ios/carradio-ios-unsigned.ipa') != ''
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create latest-builds --prerelease \
+            --title "Latest builds (auto)" \
+            --notes "Rolling debug builds from main." || true
+          gh release upload latest-builds carradio-ios-unsigned.ipa --clobber

@@ -1,0 +1,35 @@
+name: Android — build APK
+
+on:
+  push:
+    branches: [main]
+    paths: ["android/**", ".github/workflows/android.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run: { working-directory: android }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: 17 }
+      - uses: gradle/actions/setup-gradle@v3
+        with: { gradle-version: "8.6" }
+      - run: gradle --no-daemon test assembleDebug
+      - run: mv app/build/outputs/apk/debug/app-debug.apk carradio-debug.apk
+      - uses: actions/upload-artifact@v4
+        with: { name: carradio-debug-apk, path: android/carradio-debug.apk }
+      - name: Update latest-builds release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create latest-builds --prerelease \
+            --title "Latest builds (auto)" \
+            --notes "Rolling debug builds from main. Android: install the APK directly (enable 'install unknown apps'). Replaced by store links later." \
+            || true
+          gh release upload latest-builds carradio-debug.apk --clobber

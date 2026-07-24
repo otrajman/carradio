@@ -1,8 +1,8 @@
 /* Car Radio — night instrument cluster.
    Tokens: asphalt #07090b, panel #10141a, cluster amber #f5a524,
    receive green #4ade80, record red #f4655f, text #e8ecea, dim #66707a. */
-@import "@fontsource/chakra-petch/400.css";
-@import "@fontsource/chakra-petch/600.css";
+@import "@fontsource/chakra-petch/latin-400.css";
+@import "@fontsource/chakra-petch/latin-600.css";
 
 :root {
   --asphalt: #07090b;
@@ -97,6 +97,13 @@ button {
   color: var(--dim);
 }
 .home .handle-preview b { color: var(--amber); font-weight: 400; }
+.home .get-apps {
+  margin-top: 18px;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+}
+.home .get-apps a { color: var(--text); text-decoration-color: var(--amber-dim); }
+.home .get-apps a:hover { color: var(--amber); }
 
 /* ---------- drive mode ---------- */
 .drive {

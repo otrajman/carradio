@@ -25,6 +25,28 @@ export function Home(props: {
       <div className="handle-preview">
         this trip you are <b>{handle}</b>
       </div>
+      <div className="get-apps">
+        <span className="dim">native apps (dev builds): </span>
+        <a
+          href="https://github.com/otrajman/carradio/releases/download/latest-builds/carradio-debug.apk"
+          target="_blank"
+          rel="noreferrer"
+        >
+          Android APK
+        </a>
+        {" · "}
+        <a
+          href="https://github.com/otrajman/carradio/releases/tag/latest-builds"
+          target="_blank"
+          rel="noreferrer"
+        >
+          iOS (sideload)
+        </a>
+        {" · "}
+        <a href="https://github.com/otrajman/carradio" target="_blank" rel="noreferrer">
+          source
+        </a>
+      </div>
     </div>
   );
 }

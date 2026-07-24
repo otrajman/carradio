@@ -11,3 +11,5 @@ android/local.properties
 ios/*.xcodeproj
 ios/build/
 ios/DerivedData/
+pwa/dist-hosted/
+.toolchain/

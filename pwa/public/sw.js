@@ -1,7 +1,8 @@
 // Minimal offline shell. Audio and realtime require network; this only keeps the
 // app booting instantly and surviving brief signal drops.
 const CACHE = "carradio-v1";
-const SHELL = ["/", "/index.html", "/manifest.webmanifest", "/icon.svg"];
+// Relative to the SW's own scope so it works at / (local) and /carradio/ (Pages).
+const SHELL = ["./", "./index.html", "./manifest.webmanifest", "./icon.svg"];
 
 self.addEventListener("install", (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)));
@@ -27,6 +28,6 @@ self.addEventListener("fetch", (e) => {
         caches.open(CACHE).then((c) => c.put(e.request, copy));
         return res;
       })
-      .catch(() => caches.match(e.request).then((r) => r ?? caches.match("/index.html"))),
+      .catch(() => caches.match(e.request).then((r) => r ?? caches.match("./index.html"))),
   );
 });
