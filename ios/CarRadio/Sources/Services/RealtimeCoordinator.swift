@@ -174,16 +174,17 @@ final class RealtimeCoordinator {
 
     private func handlePresence(action: any PresenceAction, room: String) {
         var members = presenceMembers[room] ?? []
-        for join in action.joins {
-            if let info = decodePresence(join.state) {
+        // joins/leaves are keyed by presence ref: [String: PresenceV2]
+        for presence in action.joins.values {
+            if let info = decodePresence(presence.state) {
                 // Only count human peers that aren't us (PROTOCOL §7).
                 if info.kind != "system", info.trip_id != myTripID {
                     members.insert(info.trip_id)
                 }
             }
         }
-        for leave in action.leaves {
-            if let info = decodePresence(leave.state) {
+        for presence in action.leaves.values {
+            if let info = decodePresence(presence.state) {
                 members.remove(info.trip_id)
             }
         }
