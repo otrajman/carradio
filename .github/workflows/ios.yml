@@ -21,17 +21,25 @@ jobs:
       - run: xcodegen generate
       - name: Build (simulator, no signing)
         run: |
-          set -o pipefail
-          xcodebuild -project CarRadio.xcodeproj -scheme CarRadio \
+          if ! xcodebuild -project CarRadio.xcodeproj -scheme CarRadio \
             -destination 'generic/platform=iOS Simulator' \
             -configuration Debug build \
-            CODE_SIGNING_ALLOWED=NO | tail -40
+            CODE_SIGNING_ALLOWED=NO > build.log 2>&1; then
+            echo "== BUILD FAILED, errors: =="
+            grep -E "error:" build.log | sort -u | head -60
+            exit 1
+          fi
+          tail -5 build.log
       - name: Unit tests (core)
         run: |
-          set -o pipefail
-          xcodebuild -project CarRadio.xcodeproj -scheme CarRadio \
+          if ! xcodebuild -project CarRadio.xcodeproj -scheme CarRadio \
             -destination 'platform=iOS Simulator,name=iPhone 16' \
-            test CODE_SIGNING_ALLOWED=NO | tail -60
+            test CODE_SIGNING_ALLOWED=NO > test.log 2>&1; then
+            echo "== TESTS FAILED: =="
+            grep -E "error:|failed|Failing" test.log | sort -u | head -60
+            exit 1
+          fi
+          grep -E "Executed|passed" test.log | tail -5
       - name: Unsigned device build + ipa
         continue-on-error: true
         run: |
