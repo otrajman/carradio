@@ -11,7 +11,8 @@ permissions:
 
 jobs:
   build:
-    runs-on: macos-14
+    # macos-15 ships Xcode 16, required for the project format current XcodeGen emits.
+    runs-on: macos-15
     defaults:
       run: { working-directory: ios }
     steps:
@@ -20,19 +21,21 @@ jobs:
       - run: xcodegen generate
       - name: Build (simulator, no signing)
         run: |
+          set -o pipefail
           xcodebuild -project CarRadio.xcodeproj -scheme CarRadio \
             -destination 'generic/platform=iOS Simulator' \
             -configuration Debug build \
             CODE_SIGNING_ALLOWED=NO | tail -40
       - name: Unit tests (core)
-        continue-on-error: true
         run: |
+          set -o pipefail
           xcodebuild -project CarRadio.xcodeproj -scheme CarRadio \
-            -destination 'platform=iOS Simulator,name=iPhone 15' \
+            -destination 'platform=iOS Simulator,name=iPhone 16' \
             test CODE_SIGNING_ALLOWED=NO | tail -60
       - name: Unsigned device build + ipa
         continue-on-error: true
         run: |
+          set -o pipefail
           xcodebuild -project CarRadio.xcodeproj -scheme CarRadio \
             -destination 'generic/platform=iOS' \
             -configuration Release build \

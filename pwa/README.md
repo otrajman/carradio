@@ -25,6 +25,17 @@ Supabase URL/key are baked as demo defaults in `src/config.ts`; override with
   participants with their own realtime connections), controller.
 - `src/ui/` — Home, DriveMode (ring instrument), Simulator (stage + control rail).
 
+## Hosting / CI
+
+- **Public demo**: deployed to GitHub Pages by `.github/workflows/pwa.yml` on every push
+  to `main` touching `pwa/` → <https://otrajman.github.io/carradio/>. The alias
+  `https://trstelgemjdeqqdlasgw.supabase.co/functions/v1/app` 302-redirects there
+  (the Supabase gateway rewrites HTML responses to text/plain, so direct edge hosting
+  doesn't work — `vite.hosted.config.ts` + `supabase/functions/deploy-asset` remain
+  as the abandoned-but-working-upload alternative).
+- Native dev builds are linked from the Home screen (`latest-builds` GitHub release,
+  updated by the Android/iOS workflows). Swap for store links at launch.
+
 ## Browser notes
 
 - **Chrome/Edge** recommended: MediaRecorder opus, Web Speech wake word, TTS voices.

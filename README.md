@@ -1,5 +1,7 @@
 # Car Radio
 
+**Live demo: <https://otrajman.github.io/carradio/>** · [Android APK](https://github.com/otrajman/carradio/releases/download/latest-builds/carradio-debug.apk) · [all dev builds](https://github.com/otrajman/carradio/releases/tag/latest-builds)
+
 Hyper-local, ephemeral voice chat for drivers in the same traffic. Spec: `prd.md`.
 Wire protocol shared by all clients: `docs/PROTOCOL.md` (read this first — it also lists
 every judgment call where v1 deviates from the PRD and why).
@@ -14,6 +16,8 @@ every judgment call where v1 deviates from the PRD and why).
 | `ios/` | Swift / SwiftUI / CarPlay source project (XcodeGen) | Core logic **compiled + 41 tests passing** on Linux Swift (H3 port verified vs 6,792 h3-js fixtures); app target needs Xcode — see `ios/HANDOFF.md` |
 
 ## Demo in 60 seconds
+
+Open **<https://otrajman.github.io/carradio/>** (Chrome recommended), or run locally:
 
 ```bash
 cd pwa
