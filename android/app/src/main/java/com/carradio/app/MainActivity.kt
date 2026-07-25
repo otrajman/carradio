@@ -106,6 +106,11 @@ private fun AppRoot() {
             },
             onGoOnAir = { RadioService.start(context) },
             onGoOffAir = { RadioService.stop(context) },
+            onExitApp = {
+                // Full exit: stop the foreground service, then remove the task.
+                RadioService.stop(context)
+                (context as? ComponentActivity)?.finishAndRemoveTask()
+            },
             onOpenSettings = { showSettings = true },
             onPassengerOverride = {
                 RadioService.sendAction(context, RadioService.ACTION_PASSENGER_OVERRIDE)

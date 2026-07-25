@@ -71,6 +71,14 @@ final class PlaybackQueue: NSObject, ObservableObject {
         processIfNeeded()
     }
 
+    /// Full stop: drops the queue and silences anything in flight (end of trip).
+    func stopAll() {
+        queue.removeAll()
+        audioPlayer?.stop()
+        synthesizer.stopSpeaking(at: .immediate)
+        resumeFinish()
+    }
+
     var isIdle: Bool { !processing && queue.isEmpty }
 
     /// The payload most recently played to completion (for "mute the last

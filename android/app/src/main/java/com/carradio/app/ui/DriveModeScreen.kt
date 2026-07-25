@@ -63,6 +63,7 @@ fun DriveModeScreen(
     onReport: () -> Unit,
     onGoOnAir: () -> Unit,
     onGoOffAir: () -> Unit,
+    onExitApp: () -> Unit,
     onOpenSettings: () -> Unit,
     onPassengerOverride: () -> Unit
 ) {
@@ -105,6 +106,7 @@ fun DriveModeScreen(
                 serviceRunning = serviceRunning,
                 onOpenSettings = onOpenSettings,
                 onGoOffAir = onGoOffAir,
+                onExitApp = onExitApp,
                 onPassengerOverride = onPassengerOverride
             )
 
@@ -187,6 +189,7 @@ private fun TopBar(
     serviceRunning: Boolean,
     onOpenSettings: () -> Unit,
     onGoOffAir: () -> Unit,
+    onExitApp: () -> Unit,
     onPassengerOverride: () -> Unit
 ) {
     Row(
@@ -224,6 +227,15 @@ private fun TopBar(
                     modifier = Modifier
                         .padding(end = 20.dp)
                         .clickable { onGoOffAir() }
+                )
+            } else {
+                Text(
+                    text = "Exit",
+                    fontSize = 15.sp,
+                    color = RadioTextDim,
+                    modifier = Modifier
+                        .padding(end = 20.dp)
+                        .clickable { onExitApp() }
                 )
             }
             Text(

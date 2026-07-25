@@ -99,12 +99,17 @@ final class AppModel: ObservableObject {
         }
     }
 
+    /// Full teardown: after this, the app holds no mic, GPS, audio session, or
+    /// network activity — iOS will suspend it normally (Apple forbids apps
+    /// terminating themselves; the app switcher is the only true quit).
     func endTrip() {
         Task { await realtime.shutdown() }
         location.stop()
         wakeWord.stopListening()
         nowPlaying.deactivate()
         recorder.cancel()
+        playback.stopAll()
+        AudioSessionController.shared.end()
         tripID = nil
         mutedTripIDs = []
         phase = .idle

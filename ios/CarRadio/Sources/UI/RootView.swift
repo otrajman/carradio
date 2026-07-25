@@ -57,7 +57,7 @@ private struct StartView: View {
             Text("CAR RADIO")
                 .font(.system(size: 34, weight: .black, design: .rounded))
                 .kerning(4)
-            Text("Talk to the traffic around you.\nNew handle every trip. Nothing is kept.")
+            Text("Talk to the traffic around you.\nNew handle every trip. Nothing is kept.\nOff air, Car Radio uses no mic, GPS, or data.")
                 .font(.footnote)
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.secondary)
