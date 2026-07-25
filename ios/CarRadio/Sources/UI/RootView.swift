@@ -67,7 +67,7 @@ private struct StartView: View {
                 .autocorrectionDisabled()
                 .textInputAutocapitalization(.never)
                 .padding(.horizontal, 40)
-                .onChange(of: convoyCode) { _, newValue in
+                .onChange(of: convoyCode) { newValue in
                     model.setConvoyCode(newValue)
                 }
             Button {
