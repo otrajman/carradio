@@ -109,6 +109,10 @@ export class PlayQueue {
     return this.playing;
   }
 
+  get isEmpty(): boolean {
+    return this.playing === null && this.q.length === 0;
+  }
+
   enqueue(item: QueueItem) {
     this.q.push(item);
     void this.pump();
@@ -188,16 +192,17 @@ export class PlayQueue {
     return new Promise((resolve) => {
       if (!("speechSynthesis" in window)) return resolve();
       const u = new SpeechSynthesisUtterance(item.text ?? "");
-      const voices = speechSynthesis.getVoices().filter((v) => v.lang.startsWith("en"));
+      const ranked = rankedVoices();
       if (item.kind === "system") {
-        u.rate = 1.0;
+        u.rate = 1.02;
         u.pitch = 1.0;
-        if (voices.length) u.voice = voices[0];
+        if (ranked.length) u.voice = ranked[0];
       } else {
-        // deterministic per-sender variation so bots sound like different people
-        u.pitch = 0.7 + (item.voiceSeed % 7) * 0.1;
-        u.rate = 0.95 + (item.voiceSeed % 3) * 0.06;
-        if (voices.length) u.voice = voices[item.voiceSeed % voices.length];
+        // Deterministic per-sender voice from the GOOD voices only, with mild
+        // variation — extreme pitch shifts are what make TTS sound robotic.
+        if (ranked.length) u.voice = ranked[item.voiceSeed % ranked.length];
+        u.pitch = 0.94 + (item.voiceSeed % 4) * 0.045; // 0.94–1.08
+        u.rate = 0.98 + (item.voiceSeed % 3) * 0.04; // 0.98–1.06
       }
       this.currentUtterance = u;
       u.onend = () => {
@@ -211,6 +216,34 @@ export class PlayQueue {
       speechSynthesis.speak(u);
     });
   }
+}
+
+/**
+ * Web Speech voices ranked by realism. Chrome's "Google …" network voices are
+ * dramatically better than local espeak/flite; Edge's "… Natural" better still.
+ */
+let voiceCache: SpeechSynthesisVoice[] | null = null;
+function rankedVoices(): SpeechSynthesisVoice[] {
+  if (voiceCache && voiceCache.length) return voiceCache;
+  const all = speechSynthesis.getVoices().filter((v) => v.lang.startsWith("en"));
+  const score = (v: SpeechSynthesisVoice): number => {
+    const n = v.name.toLowerCase();
+    if (n.includes("natural") || n.includes("neural")) return 0;
+    if (n.includes("google")) return 1;
+    if (n.includes("samantha") || n.includes("daniel") || n.includes("karen")) return 2;
+    if (n.includes("espeak") || n.includes("espeak-ng")) return 9;
+    return 5;
+  };
+  voiceCache = [...all].sort((a, b) => score(a) - score(b));
+  // drop the espeak tier entirely when anything better exists
+  const good = voiceCache.filter((v) => score(v) < 9);
+  if (good.length) voiceCache = good;
+  return voiceCache;
+}
+if ("speechSynthesis" in window) {
+  speechSynthesis.onvoiceschanged = () => {
+    voiceCache = null;
+  };
 }
 
 function sleep(ms: number) {

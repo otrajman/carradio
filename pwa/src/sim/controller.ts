@@ -19,6 +19,10 @@ export class SimController {
   running = false;
   lastBotLine: { handle: string; text: string } | null = null;
   userFix: GpsFix | null = null;
+  /** Ambient CB chatter: bots talk on their own every few seconds. */
+  chatter = true;
+  private chatterCooldown = 4; // ticks until next possible line
+  private lastSpeaker: Bot | null = null;
 
   constructor(provider: ManualProvider, route: Route) {
     this.provider = provider;
@@ -63,7 +67,33 @@ export class SimController {
     };
     this.provider.push(this.userFix);
     for (const b of this.bots) b.tick(dtS);
+    this.tickChatter();
     this.emit();
+  }
+
+  /**
+   * CB-radio ambience: roughly every 8–18 s a bot talks; ~40% of the time it's
+   * a reply to whoever spoke last. Only one voice at a time.
+   */
+  private tickChatter() {
+    if (!this.chatter || this.bots.length === 0) return;
+    if (--this.chatterCooldown > 0) return;
+    const anySpeaking = this.bots.some((b) => Date.now() < b.speakingUntil);
+    if (anySpeaking) {
+      this.chatterCooldown = 2;
+      return;
+    }
+    this.chatterCooldown = 8 + Math.floor(Math.random() * 10);
+    const candidates = this.bots.filter((b) => b !== this.lastSpeaker);
+    const bot = (candidates.length ? candidates : this.bots)[
+      Math.floor(Math.random() * (candidates.length ? candidates.length : this.bots.length))
+    ];
+    const reply =
+      this.lastSpeaker && Math.random() < 0.4
+        ? Bot.replyTo(this.lastSpeaker.handle)
+        : undefined;
+    this.lastSpeaker = bot;
+    void this.botSpeak(bot, reply);
   }
 
   /**
@@ -78,7 +108,11 @@ export class SimController {
       role === "ahead" ? Math.min(0.95, userFrac + df)
       : role === "behind" ? Math.max(0.02, userFrac - df)
       : Math.min(0.95, userFrac + df); // oncoming: placed ahead, driving toward user
-    const speed = role === "oncoming" ? 27 : this.userSpeedMps * (role === "ahead" ? 0.85 : 1.1);
+    // Slight speed offsets keep relative motion visible without bots piling
+    // onto the user's position.
+    const jitter = 0.94 + Math.random() * 0.08;
+    const speed =
+      role === "oncoming" ? 27 : this.userSpeedMps * (role === "ahead" ? 1.0 : 0.96) * jitter;
     const bot = new Bot(this.route, role, frac, speed);
     await bot.init();
     this.bots.push(bot);
@@ -86,11 +120,24 @@ export class SimController {
     return bot;
   }
 
-  async botSpeak(bot?: Bot): Promise<void> {
+  async botSpeak(bot?: Bot, text?: string): Promise<void> {
     const b = bot ?? this.bots[Math.floor(Math.random() * this.bots.length)];
     if (!b) return;
-    const text = await b.speak();
-    this.lastBotLine = { handle: b.handle, text };
+    try {
+      const said = await b.speak(text);
+      this.lastBotLine = { handle: b.handle, text: said };
+    } catch (e) {
+      console.warn("bot speak failed", e);
+    }
+    this.emit();
+  }
+
+  /** Spawn the default cast: two ahead, one behind, one oncoming. */
+  async spawnConvoy(): Promise<void> {
+    await this.spawnBot("ahead", 700);
+    await this.spawnBot("ahead", 1600);
+    await this.spawnBot("behind", 900);
+    await this.spawnBot("oncoming", 1200);
     this.emit();
   }
 

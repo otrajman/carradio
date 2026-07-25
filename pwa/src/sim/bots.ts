@@ -19,6 +19,24 @@ const BOT_LINES = [
   "Big pothole coming up on the right, hug the left side.",
   "Merging traffic from the on-ramp, let them in folks.",
   "Rain picking up ahead, roads are getting slick.",
+  "Anyone else seeing brake lights up past the bend?",
+  "Just passed a tow truck working the shoulder, give them room.",
+  "Gas is twenty cents cheaper at the next exit if anyone's running low.",
+  "This stretch always backs up around this hour, no surprises today.",
+  "Left lane finally opened up, we're rolling again.",
+  "Deer on the grass median a half mile up, keep your eyes peeled.",
+  "Sunset's unreal out here tonight, worth a look when it's safe.",
+  "Construction barrels start in about two miles, they took the right lane.",
+];
+
+/** Replies referencing the previous speaker — CB call-and-response feel. */
+const BOT_REPLIES = [
+  "Copy that, {handle}, appreciate the heads up.",
+  "Ten four, {handle}. I'll ease off.",
+  "Thanks {handle}, just cleared that spot, it's already thinning out.",
+  "Good looking out, {handle}.",
+  "Yeah, confirming what {handle} said, saw the same thing.",
+  "Roger, {handle}. Anything past the exit?",
 ];
 
 export type BotRole = "ahead" | "behind" | "oncoming";
@@ -36,6 +54,8 @@ export class Bot {
   lat = 0;
   lng = 0;
   heading = 0;
+  /** epoch ms until which the canvas draws this bot as "transmitting". */
+  speakingUntil = 0;
 
   constructor(route: Route, role: BotRole, startFraction: number, speedMps: number) {
     this.role = role;
@@ -104,10 +124,17 @@ export class Bot {
     });
   }
 
+  /** A reply line addressed to the previous speaker. */
+  static replyTo(handle: string): string {
+    const t = BOT_REPLIES[Math.floor(Math.random() * BOT_REPLIES.length)];
+    return t.replace("{handle}", handle);
+  }
+
   /** Send a text burst through the real pipeline: insert breadcrumb + broadcast. */
   async speak(customText?: string): Promise<string> {
     if (!this.tripId) throw new Error("bot not initialized");
     const text = customText ?? BOT_LINES[this.lineIdx++ % BOT_LINES.length];
+    this.speakingUntil = Date.now() + Math.max(2500, text.length * 65);
     const messageId = crypto.randomUUID();
     const payload: BurstPayload = {
       v: 1,

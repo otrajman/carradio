@@ -226,38 +226,139 @@ button {
   padding: 10px;
 }
 
-/* ---------- simulator ---------- */
-.sim {
+/* ---------- simulator v2: stage left, phone right, settings overlay ---------- */
+.sim2 {
   height: 100%;
-  display: grid;
-  grid-template-columns: 1fr 340px;
+  display: flex;
   overflow: hidden;
 }
-@media (max-width: 860px) {
-  .sim { grid-template-columns: 1fr; grid-template-rows: 45% 1fr; }
-}
-.sim-stage {
+.sim2-stage {
   position: relative;
-  background:
-    radial-gradient(ellipse at center, #0b0f13 0%, var(--asphalt) 75%);
+  flex: 1;
+  min-width: 0;
   overflow: hidden;
 }
-.sim-stage canvas { width: 100%; height: 100%; display: block; }
-.sim-rail {
+.sim2-stage canvas { display: block; width: 100%; height: 100%; }
+.stage-title {
+  position: absolute;
+  top: 18px;
+  left: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  pointer-events: none;
+}
+.stage-road {
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--text);
+}
+.stage-caption {
+  position: absolute;
+  bottom: 16px;
+  left: 22px;
+  font-family: var(--mono);
+  font-size: 12px;
+}
+.on-air-chip { color: var(--green); letter-spacing: 0.08em; }
+.stage-exit {
+  position: absolute;
+  top: 18px;
+  right: 20px;
+  color: var(--dim);
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  padding: 8px 12px;
+  border: 1px solid var(--edge);
+  border-radius: 999px;
+  background: rgba(16, 20, 26, 0.6);
+}
+.stage-exit:hover { color: var(--text); border-color: var(--dim); }
+
+.sim2-right {
+  position: relative;
+  width: 430px;
+  flex: none;
   background: var(--panel);
   border-left: 1px solid var(--edge);
-  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 14px 0 22px;
+  gap: 14px;
+  overflow: hidden;
+}
+.sim2-toolbar {
+  width: 100%;
+  padding: 0 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-family: var(--mono);
+  font-size: 12px;
+  position: relative;
+  z-index: 8; /* stays clickable above the settings overlay */
+}
+.phone-frame {
+  position: relative;
+  width: 340px;
+  flex: 1;
+  min-height: 0;
+  max-height: 700px;
+  border: 2px solid #232b35;
+  border-radius: 34px;
+  overflow: hidden;
+  background: var(--asphalt);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55), 0 0 0 6px #0d1116;
+}
+.phone-notch {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 84px;
+  height: 8px;
+  border-radius: 999px;
+  background: #1b222b;
+  z-index: 3;
+}
+.drive.embedded { padding-top: 30px; }
+.drive.embedded .ring-wrap { width: min(76%, 42vh); }
+.settings-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  background: var(--panel);
+  padding: 18px 20px;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 16px;
+  border-left: 1px solid var(--edge);
 }
-.sim-rail h2 {
+.settings-overlay h2 {
   font-size: 13px;
   letter-spacing: 0.28em;
   text-transform: uppercase;
   color: var(--amber);
   font-weight: 600;
+  padding-top: 44px;
+}
+.check-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  font-size: 13px;
+  color: var(--text);
+  text-transform: none;
+  letter-spacing: normal;
+}
+.check-row input { accent-color: var(--amber); }
+@media (max-width: 900px) {
+  .sim2 { flex-direction: column; }
+  .sim2-stage { min-height: 40%; }
+  .sim2-right { width: 100%; flex: 1; border-left: none; border-top: 1px solid var(--edge); }
 }
 .sim-section {
   display: flex;

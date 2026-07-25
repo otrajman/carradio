@@ -149,6 +149,29 @@ export class RadioEngine {
     this.provider.start((fix) => this.onFix(fix));
     this.elasticTimer = setInterval(() => this.updateElastic(), 15_000);
     this.presenceTimer = setInterval(() => this.trackPresence(), PRESENCE_INTERVAL_MS);
+    // On-air welcome: give breadcrumbs/live traffic a moment to arrive; if the
+    // queue is still empty, the station greets you (system voice, triple-chime).
+    setTimeout(() => {
+      if (!this.started || !this.queue.isEmpty) return;
+      const peers = this.collectPeers().filter((p) => p.kind !== "system").length;
+      const around =
+        peers === 0
+          ? "The road is quiet right now — you'll hear drivers as they come into range."
+          : peers === 1
+            ? "There's one driver in range."
+            : `There are ${peers} drivers in range.`;
+      this.queue.enqueue({
+        messageId: `welcome-${crypto.randomUUID()}`,
+        tripId: "system-welcome",
+        handle: "Radio Tower",
+        kind: "system",
+        audioPath: null,
+        text: `Welcome to Car Radio. You're on air as ${this.handle}. ${around} Tap the ring to talk, swipe down to skip.`,
+        createdAt: new Date().toISOString(),
+        isBreadcrumb: false,
+        voiceSeed: 0,
+      });
+    }, 2500);
     this.publish();
   }
 

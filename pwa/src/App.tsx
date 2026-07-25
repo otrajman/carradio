@@ -43,6 +43,7 @@ export default function App() {
       await engine.start();
       const sim = new SimController(provider, MASS_PIKE_EAST);
       sim.start();
+      void sim.spawnConvoy(); // default cast so the road feels alive immediately
       engineRef.current = engine;
       simRef.current = sim;
       setMode("sim");

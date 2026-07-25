@@ -16,6 +16,8 @@ export function DriveMode(props: {
   recorder: BurstRecorder;
   onExit: () => void;
   simulated?: boolean;
+  /** Rendered inside the simulator's phone frame: no exit button, no wake word. */
+  embedded?: boolean;
 }) {
   const { engine, recorder } = props;
   const snap = useSyncExternalStore(
@@ -55,7 +57,7 @@ export function DriveMode(props: {
 
   // Wake word: "hey radio [mute|repeat]"
   useEffect(() => {
-    if (!FEATURE_WAKEWORD || !wakeWordSupported() || props.simulated) return;
+    if (!FEATURE_WAKEWORD || !wakeWordSupported() || props.simulated || props.embedded) return;
     const ww = new WakeWordListener((action) => {
       if (action === "talk") void toggleTalk();
       else if (action === "mute") skipMute();
@@ -89,10 +91,16 @@ export function DriveMode(props: {
   const lastEvent = snap.events[snap.events.length - 1];
 
   return (
-    <div className="drive" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
-      <button className="exit-drive" onClick={props.onExit} aria-label="Exit">
-        ✕
-      </button>
+    <div
+      className={`drive${props.embedded ? " embedded" : ""}`}
+      onTouchStart={onTouchStart}
+      onTouchEnd={onTouchEnd}
+    >
+      {!props.embedded && (
+        <button className="exit-drive" onClick={props.onExit} aria-label="Exit">
+          ✕
+        </button>
+      )}
       <div className="drive-top">
         <div className="eyebrow">on air{props.simulated ? " · sim" : ""}</div>
         <div className="handle">{snap.handle.toUpperCase()}</div>
