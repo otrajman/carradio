@@ -29,13 +29,23 @@ data class MessageInsert(
     @SerialName("h3_r9") val h3R9: String,
     val location: String,
     val heading: Double,
-    val speed: Double
+    val speed: Double,
+    @SerialName("convoy_tag") val convoyTag: String? = null
 )
 
 @Serializable
 data class MuteEventInsert(
     @SerialName("muter_trip_id") val muterTripId: String,
     @SerialName("muted_trip_id") val mutedTripId: String
+)
+
+/** PROTOCOL §8 — user report of a burst/sender (Play UGC policy). */
+@Serializable
+data class ReportInsert(
+    @SerialName("reporter_trip_id") val reporterTripId: String,
+    @SerialName("reported_trip_id") val reportedTripId: String,
+    @SerialName("message_id") val messageId: String? = null,
+    val reason: String? = null
 )
 
 /** Row shape returned by the get_breadcrumbs RPC (see supabase/migrations). */
@@ -66,5 +76,6 @@ data class BreadcrumbParams(
     @SerialName("p_lng") val lng: Double,
     @SerialName("p_radius_m") val radiusM: Double,
     @SerialName("p_since_hours") val sinceHours: Int = 24,
-    @SerialName("p_limit") val limit: Int = 10
+    @SerialName("p_limit") val limit: Int = 10,
+    @SerialName("p_convoy") val convoy: String? = null
 )

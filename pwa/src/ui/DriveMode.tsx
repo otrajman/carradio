@@ -59,6 +59,7 @@ export function DriveMode(props: {
     const ww = new WakeWordListener((action) => {
       if (action === "talk") void toggleTalk();
       else if (action === "mute") skipMute();
+      else if (action === "report") void engine.reportCurrentOrLast();
       else engine.queue.replayLast();
     });
     ww.start();
@@ -132,6 +133,14 @@ export function DriveMode(props: {
               {lastEvent.distanceM != null && ` · ${lastEvent.distanceM} m`}
             </span>
           </div>
+        )}
+        {(snap.nowPlayingHandle || engine.queue.lastFinished) && (
+          <button
+            className="report-chip"
+            onClick={() => void engine.reportCurrentOrLast()}
+          >
+            report speaker
+          </button>
         )}
       </div>
     </div>

@@ -69,6 +69,9 @@ Event name: `burst`. Payload (JSON):
 `audio_path` is a path inside the public `voice_bursts` storage bucket; full URL =
 `<SUPABASE_URL>/storage/v1/object/public/<audio_path>`.
 
+Optional field `"convoy": "<tag>"` — present only in convoy mode (§14). Decoders MUST
+ignore unknown payload fields (additive evolution).
+
 ## 4. Send pipeline (in order)
 
 1. Check own shadowban: `SELECT is_shadowbanned(my_trip_id)`. If true, **pretend to send**
@@ -126,14 +129,22 @@ Let S = sender fields from payload, R = receiver's current GPS state.
 - Exit elastic mode immediately when any burst passes the strict filter or presence shows
   ≥ 2 peers.
 
-## 8. Mute / moderation
+## 8. Mute / block / report / moderation
 
-- Skip gesture (swipe down / Next-Track): stop current audio, add `S.trip_id` to the local
-  mute set (persists for the receiver's trip), and
+- **Block (stealth mute)** — skip gesture (swipe down / Next-Track): stop current audio,
+  add `S.trip_id` to the local mute set (persists for the receiver's trip), and
   `INSERT INTO mute_events (muter_trip_id, muted_trip_id)`.
-- A DB trigger applies the shadowban rule (3 distinct muters / 5 min → banned 1 h). Clients
-  never implement the rule; they only call `is_shadowbanned` (§4.1).
-- The sender is NEVER notified. No UI ever reveals mute status.
+- **Report** — explicit affordance (report button while/after a burst plays, or wake word
+  "hey radio report"): reports the current-or-last played burst.
+  `INSERT INTO reports (reporter_trip_id, reported_trip_id, message_id, reason)`.
+  Reporting also mutes the reported trip locally (a reporter never hears them again).
+- **Automated moderation** (DB triggers; clients never implement the rules, they only call
+  `is_shadowbanned`):
+  - 3 distinct muters / 5 min → shadowban 1 h.
+  - 2 distinct reporters / 24 h → shadowban 24 h.
+  - Reported messages and their audio are EXEMPT from the 24 h ephemerality cleanup and
+    retained 30 days as moderation evidence.
+- The sender is NEVER notified of mutes or reports. No UI ever reveals either.
 
 ## 9. Earcons
 
@@ -183,3 +194,35 @@ SYNTHETIC_NODES=true|false             # call synthetic-nodes edge function on c
 When GPS speed > 4.5 m/s (~10 mph) for 5 s, the phone UI locks to Drive Mode: full-screen
 tap-to-talk, swipe-down skip/mute, no lists, no keyboards, dark only. Unlocks after
 speed < 2 m/s for 30 s or via a deliberate "I'm a passenger" long-press (8 s).
+
+## 14. Convoy mode (friends-only interactions)
+
+Opt-in private channel for a group that knows a shared invite code (road-trip convoy).
+
+- UI: optional "convoy code" entered before the trip. Normalize: trim, lowercase,
+  collapse spaces. `convoy_tag = first 16 hex chars of SHA-256(normalized code)` — the
+  raw code never goes on the wire.
+- Sending: payload carries `"convoy": <tag>`; the breadcrumb row sets `convoy_tag`.
+- Receive filter, inserted after §5.3 (mute):
+  - Receiver in convoy mode: play ONLY bursts with a matching tag (skip §5.4–§5.5 —
+    convoy members hear each other regardless of heading within subscribed rooms);
+    drop everything else, including all public traffic.
+  - Receiver not in convoy mode: drop any burst carrying a convoy tag.
+- Breadcrumbs: pass `p_convoy := <tag or null>` — the RPC returns only rows whose
+  `convoy_tag` matches (null matches null).
+- System bursts (`kind=system`) are never convoy-tagged and ARE played in convoy mode
+  (safety alerts reach everyone).
+
+## 15. Data retention (hard bounds, enforced by pg_cron hourly)
+
+| Data | Retained |
+|---|---|
+| Voice/text messages + audio objects | 24 h |
+| …unless referenced by a report | 30 days (moderation evidence) |
+| mute_events | 24 h |
+| reports | 30 days |
+| shadowbans | until 24 h past expiry |
+| trips | 48 h after last message is gone |
+
+Everything is deleted automatically well inside 90 days. There are no user accounts;
+trips are anonymous ephemeral identities.

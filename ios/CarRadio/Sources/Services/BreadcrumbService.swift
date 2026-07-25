@@ -24,6 +24,7 @@ final class BreadcrumbService {
 
     var tripID: UUID?
     var mutedTripIDs: () -> Set<String> = { [] }
+    var convoyTag: () -> String? = { nil }
     var isElastic: () -> Bool = { false }
 
     init(supabase: SupabaseService, playback: PlaybackQueue, playedIDs: PlayedIDStore, filter: BurstFilter) {
@@ -68,7 +69,8 @@ final class BreadcrumbService {
                     lng: state.lng,
                     radiusM: radius,
                     sinceHours: 24,
-                    limit: 10
+                    limit: 10,
+                    convoyTag: self.convoyTag()
                 )
                 self.addPending(crumbs)
             } catch {
@@ -115,7 +117,8 @@ final class BreadcrumbService {
                 receiver: state,
                 muted: mutedTripIDs(),
                 elasticMode: isElastic(),
-                isBreadcrumb: true
+                isBreadcrumb: true,
+                convoyTag: convoyTag()
             )
             guard result.verdict == .play else {
                 // Geometry said no — drop silently but don't mark played, the

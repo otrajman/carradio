@@ -25,6 +25,8 @@ public struct BurstPayload: Codable, Equatable, Sendable {
     public var h3R9: String
     /// ISO-8601 UTC string.
     public var createdAt: String
+    /// §14: present only in convoy mode (hashed invite code).
+    public var convoy: String?
 
     public var isSystem: Bool { kind == "system" }
 
@@ -42,6 +44,7 @@ public struct BurstPayload: Codable, Equatable, Sendable {
         case speed
         case h3R9 = "h3_r9"
         case createdAt = "created_at"
+        case convoy
     }
 
     public init(
@@ -57,7 +60,8 @@ public struct BurstPayload: Codable, Equatable, Sendable {
         heading: Double,
         speed: Double,
         h3R9: String,
-        createdAt: String
+        createdAt: String,
+        convoy: String? = nil
     ) {
         self.v = v
         self.messageID = messageID
@@ -72,6 +76,7 @@ public struct BurstPayload: Codable, Equatable, Sendable {
         self.speed = speed
         self.h3R9 = h3R9
         self.createdAt = createdAt
+        self.convoy = convoy
     }
 }
 

@@ -125,6 +125,57 @@ describe("evaluateBurst", () => {
   });
 });
 
+describe("convoy mode (§14)", () => {
+  const TAG = "aabbccdd00112233";
+
+  it("convoy members hear each other regardless of heading/distance", () => {
+    const far = destination(BASE_LAT, BASE_LNG, 270, 6000);
+    expect(
+      evaluateBurst(
+        payload({ convoy: TAG, heading: 270 }),
+        receiver({ convoyTag: TAG, lat: far.lat, lng: far.lng }),
+        deps,
+      ),
+    ).toBe("play");
+  });
+
+  it("convoy members do not hear public traffic or other convoys", () => {
+    expect(
+      evaluateBurst(payload({}), receiver({ convoyTag: TAG }), deps),
+    ).toBe("convoy");
+    expect(
+      evaluateBurst(
+        payload({ convoy: "ffff000011112222" }),
+        receiver({ convoyTag: TAG }),
+        deps,
+      ),
+    ).toBe("convoy");
+  });
+
+  it("public receivers never hear convoy traffic", () => {
+    expect(evaluateBurst(payload({ convoy: TAG }), receiver({}), deps)).toBe("convoy");
+  });
+
+  it("system bursts reach convoy members", () => {
+    expect(
+      evaluateBurst(
+        payload({ kind: "system", text: "alert", audio_path: null }),
+        receiver({ convoyTag: TAG }),
+        deps,
+      ),
+    ).toBe("play");
+  });
+
+  it("mute still applies inside a convoy", () => {
+    expect(
+      evaluateBurst(payload({ convoy: TAG }), receiver({ convoyTag: TAG }), {
+        ...deps,
+        isMuted: () => true,
+      }),
+    ).toBe("muted");
+  });
+});
+
 describe("rooms", () => {
   it("subscribe set is 7 res-7 cells containing own cell", () => {
     const cells = subscribeCells(BASE_LAT, BASE_LNG);

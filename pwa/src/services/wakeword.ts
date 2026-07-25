@@ -1,6 +1,6 @@
 // "Hey Radio" wake word via Web Speech API (Chrome only; Porcupine slot in v2).
 // Commands per PROTOCOL: "hey radio mute", "hey radio repeat", bare "hey radio" = talk.
-type WakeAction = "talk" | "mute" | "repeat";
+type WakeAction = "talk" | "mute" | "repeat" | "report";
 
 const SR: typeof SpeechRecognition | undefined =
   (window as any).SpeechRecognition ?? (window as any).webkitSpeechRecognition;
@@ -31,6 +31,7 @@ export class WakeWordListener {
         if (!/\bhey,?\s+radio\b/.test(text)) continue;
         if (/\bmute\b/.test(text)) this.onAction("mute");
         else if (/\brepeat\b/.test(text)) this.onAction("repeat");
+        else if (/\breport\b/.test(text)) this.onAction("report");
         else this.onAction("talk");
       }
     };

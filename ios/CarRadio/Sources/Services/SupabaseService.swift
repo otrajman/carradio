@@ -58,6 +58,7 @@ final class SupabaseService {
         let location: String
         let heading: Double
         let speed: Double
+        let convoy_tag: String?
     }
 
     /// PROTOCOL §4.3 — breadcrumb insert. `location` uses EWKT which PostgREST
@@ -72,7 +73,8 @@ final class SupabaseService {
         lat: Double,
         lng: Double,
         heading: Double,
-        speed: Double
+        speed: Double,
+        convoyTag: String? = nil
     ) async throws {
         try await client.from("messages")
             .insert(MessageInsert(
@@ -84,7 +86,8 @@ final class SupabaseService {
                 h3_r9: h3R9,
                 location: "SRID=4326;POINT(\(lng) \(lat))",
                 heading: heading,
-                speed: speed
+                speed: speed,
+                convoy_tag: convoyTag
             ))
             .execute()
     }
@@ -96,6 +99,7 @@ final class SupabaseService {
         let p_radius_m: Double
         let p_since_hours: Int
         let p_limit: Int
+        let p_convoy: String?
     }
 
     /// PROTOCOL §6 — signature verified against the deployed function:
@@ -106,7 +110,8 @@ final class SupabaseService {
         lng: Double,
         radiusM: Double,
         sinceHours: Int = 24,
-        limit: Int = 10
+        limit: Int = 10,
+        convoyTag: String? = nil
     ) async throws -> [BreadcrumbMessage] {
         try await client
             .rpc("get_breadcrumbs", params: BreadcrumbParams(
@@ -115,7 +120,8 @@ final class SupabaseService {
                 p_lng: lng,
                 p_radius_m: radiusM,
                 p_since_hours: sinceHours,
-                p_limit: limit
+                p_limit: limit,
+                p_convoy: convoyTag
             ))
             .execute()
             .value
@@ -131,6 +137,31 @@ final class SupabaseService {
     func insertMuteEvent(muter: UUID, muted: UUID) async throws {
         try await client.from("mute_events")
             .insert(MuteEventInsert(muter_trip_id: muter, muted_trip_id: muted))
+            .execute()
+    }
+
+    // MARK: Reports (PROTOCOL §8 — Play/App Store UGC policy)
+
+    private struct ReportInsert: Encodable {
+        let reporter_trip_id: UUID
+        let reported_trip_id: UUID
+        let message_id: UUID?
+        let reason: String?
+    }
+
+    func insertReport(
+        reporter: UUID,
+        reported: UUID,
+        messageID: UUID?,
+        reason: String? = nil
+    ) async throws {
+        try await client.from("reports")
+            .insert(ReportInsert(
+                reporter_trip_id: reporter,
+                reported_trip_id: reported,
+                message_id: messageID,
+                reason: reason
+            ))
             .execute()
     }
 

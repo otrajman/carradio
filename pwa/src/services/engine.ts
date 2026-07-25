@@ -87,9 +87,12 @@ export class RadioEngine {
   private shadowbanned = false;
   private shadowbanCheckedAt = 0;
 
-  constructor(provider: LocationProvider, handle: string) {
+  readonly convoyTag: string | null;
+
+  constructor(provider: LocationProvider, handle: string, convoyTag: string | null = null) {
     this.provider = provider;
     this.handle = handle;
+    this.convoyTag = convoyTag;
     this.playedIds = new Set(
       JSON.parse(localStorage.getItem(PLAYED_KEY) ?? "[]") as string[],
     );
@@ -249,6 +252,7 @@ export class RadioEngine {
         heading: this.fix.heading,
         speed: this.fix.speed,
         elastic: this.elastic,
+        convoyTag: this.convoyTag,
       },
       {
         isMuted: (id) => this.mutedSet.has(id),
@@ -354,6 +358,7 @@ export class RadioEngine {
         location: `SRID=4326;POINT(${this.fix.lng} ${this.fix.lat})`,
         heading: payload.heading,
         speed: payload.speed,
+        convoy_tag: this.convoyTag,
       });
       if (insErr) throw new Error(`insert: ${insErr.message}`);
       await broadcastToRooms(
@@ -388,6 +393,7 @@ export class RadioEngine {
       speed: f.speed,
       h3_r9: latLngToCell(f.lat, f.lng, 9),
       created_at: new Date().toISOString(),
+      convoy: this.convoyTag,
     };
   }
 
@@ -420,6 +426,26 @@ export class RadioEngine {
     return current.handle;
   }
 
+  /**
+   * §8 report: reports the currently-playing (or last finished) burst, stops it,
+   * and mutes the sender locally. The sender is never notified.
+   */
+  async reportCurrentOrLast(reason: string | null = null): Promise<string | null> {
+    const target = this.queue.nowPlaying ?? this.queue.lastFinished;
+    if (!target || !this.tripId || target.tripId === this.tripId) return null;
+    if (this.queue.nowPlaying) this.queue.stopCurrent();
+    earcons.muted();
+    this.mutedSet.add(target.tripId);
+    await supabase.from("reports").insert({
+      reporter_trip_id: this.tripId,
+      reported_trip_id: target.tripId,
+      message_id: target.messageId,
+      reason,
+    });
+    this.publish();
+    return target.handle;
+  }
+
   // ---- breadcrumbs (§6) ----
   private async fetchBreadcrumbs(fix: GpsFix) {
     if (!this.tripId) return;
@@ -432,6 +458,7 @@ export class RadioEngine {
       p_radius_m: radius,
       p_since_hours: 24,
       p_limit: 10,
+      p_convoy: this.convoyTag,
     });
     if (error || !data) return;
     const fresh = (data as Breadcrumb[]).filter((m) => !this.playedIds.has(m.id));

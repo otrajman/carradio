@@ -254,6 +254,54 @@ class BurstFilterTest {
         )
     }
 
+    // --- §14 convoy mode ----------------------------------------------------------------
+
+    @Test
+    fun `convoy members hear each other regardless of geometry, outsiders are isolated`() {
+        val filter = BurstFilter()
+        val tag = "aabbccdd00112233"
+        // Wrong heading + far behind: convoy match still plays.
+        val convoyReceiver = receiverAt(270.0, 6000.0, heading = 270.0)
+            .copy(convoyTag = tag)
+        assertEquals(
+            BurstFilter.Decision.PLAY,
+            filter.evaluate(burst(messageId = "c1", speed = 5.0).copy(convoy = tag), convoyReceiver)
+        )
+        // Convoy member never hears public traffic.
+        assertEquals(
+            BurstFilter.Decision.DROP_CONVOY,
+            filter.evaluate(burst(messageId = "c2"), convoyReceiver)
+        )
+        // ...but does hear nearby system bursts (geometry still applies to them).
+        assertEquals(
+            BurstFilter.Decision.PLAY,
+            filter.evaluate(
+                burst(messageId = "c3", kind = BurstPayload.KIND_SYSTEM),
+                receiverAt(90.0, 500.0).copy(convoyTag = tag)
+            )
+        )
+        // Public receiver never hears convoy traffic.
+        assertEquals(
+            BurstFilter.Decision.DROP_CONVOY,
+            filter.evaluate(burst(messageId = "c4").copy(convoy = tag), receiverAt(90.0, 500.0))
+        )
+        // Mute wins over convoy match.
+        filter.mute("sender")
+        assertEquals(
+            BurstFilter.Decision.DROP_MUTED,
+            filter.evaluate(burst(messageId = "c5").copy(convoy = tag), convoyReceiver)
+        )
+    }
+
+    @Test
+    fun `convoy tag derivation matches the cross-platform spec`() {
+        // Same normalization + SHA-256 prefix on every platform (PROTOCOL §14).
+        assertEquals(ConvoyTag.fromCode("  Road Trip  2026 "), ConvoyTag.fromCode("road trip 2026"))
+        assertEquals(16, ConvoyTag.fromCode("x")!!.length)
+        assertEquals(null, ConvoyTag.fromCode("   "))
+        assertEquals(null, ConvoyTag.fromCode(null))
+    }
+
     @Test
     fun `passesStrictGeometry is stateless and matches strict evaluation`() {
         val filter = BurstFilter()

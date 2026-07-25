@@ -46,6 +46,7 @@ struct RootView: View {
 
 private struct StartView: View {
     @EnvironmentObject private var model: AppModel
+    @AppStorage("convoy_code") private var convoyCode = ""
 
     var body: some View {
         VStack(spacing: 12) {
@@ -61,6 +62,14 @@ private struct StartView: View {
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.secondary)
             Spacer()
+            TextField("Convoy code (optional — friends only)", text: $convoyCode)
+                .textFieldStyle(.roundedBorder)
+                .autocorrectionDisabled()
+                .textInputAutocapitalization(.never)
+                .padding(.horizontal, 40)
+                .onChange(of: convoyCode) { _, newValue in
+                    model.setConvoyCode(newValue)
+                }
             Button {
                 model.startTrip()
             } label: {

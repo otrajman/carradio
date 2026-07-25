@@ -85,7 +85,8 @@ class Repository(
                 h3R9 = payload.h3R9,
                 location = "SRID=4326;POINT(${payload.lng} ${payload.lat})",
                 heading = payload.heading.coerceIn(0.0, 359.999),
-                speed = payload.speed.coerceIn(0.0, 149.0)
+                speed = payload.speed.coerceIn(0.0, 149.0),
+                convoyTag = payload.convoy
             )
         )
     }
@@ -100,6 +101,22 @@ class Repository(
             }
         }
 
+    /** PROTOCOL §8 — report a burst/sender. Best effort, sender never notified. */
+    suspend fun insertReport(
+        reporterTripId: String,
+        reportedTripId: String,
+        messageId: String?,
+        reason: String? = null
+    ) = withContext(Dispatchers.IO) {
+        try {
+            client.from("reports").insert(
+                ReportInsert(reporterTripId, reportedTripId, messageId, reason)
+            )
+        } catch (e: Exception) {
+            Log.w(TAG, "reports insert failed", e)
+        }
+    }
+
     /** PROTOCOL §6 — breadcrumbs near a point, newest first, caller's trip excluded server-side. */
     suspend fun getBreadcrumbs(
         tripId: String,
@@ -107,12 +124,13 @@ class Repository(
         lng: Double,
         radiusM: Double,
         sinceHours: Int = 24,
-        limit: Int = 10
+        limit: Int = 10,
+        convoyTag: String? = null
     ): List<BreadcrumbRow> = withContext(Dispatchers.IO) {
         try {
             client.postgrest.rpc(
                 "get_breadcrumbs",
-                BreadcrumbParams(tripId, lat, lng, radiusM, sinceHours, limit)
+                BreadcrumbParams(tripId, lat, lng, radiusM, sinceHours, limit, convoyTag)
             ).decodeList()
         } catch (e: Exception) {
             Log.w(TAG, "get_breadcrumbs failed", e)

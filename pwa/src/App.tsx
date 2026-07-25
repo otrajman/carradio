@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { convoyTagFromCode } from "./protocol/convoy";
 import { unlockAudio } from "./services/audio";
 import { RadioEngine } from "./services/engine";
 import { GeoProvider, ManualProvider } from "./services/location";
@@ -18,10 +19,14 @@ export default function App() {
   const recorderRef = useRef(new BurstRecorder());
   const [error, setError] = useState<string | null>(null);
 
-  const startDrive = async (handle: string) => {
+  const startDrive = async (handle: string, convoyCode: string) => {
     unlockAudio(); // must happen inside the click gesture
     try {
-      const engine = new RadioEngine(new GeoProvider(), handle);
+      const engine = new RadioEngine(
+        new GeoProvider(),
+        handle,
+        await convoyTagFromCode(convoyCode),
+      );
       await engine.start();
       engineRef.current = engine;
       setMode("drive");
@@ -30,11 +35,11 @@ export default function App() {
     }
   };
 
-  const startSim = async (handle: string) => {
+  const startSim = async (handle: string, convoyCode: string) => {
     unlockAudio();
     try {
       const provider = new ManualProvider();
-      const engine = new RadioEngine(provider, handle);
+      const engine = new RadioEngine(provider, handle, await convoyTagFromCode(convoyCode));
       await engine.start();
       const sim = new SimController(provider, MASS_PIKE_EAST);
       sim.start();
@@ -73,7 +78,10 @@ export default function App() {
   }
   return (
     <>
-      <Home onDrive={(h) => void startDrive(h)} onSimulate={(h) => void startSim(h)} />
+      <Home
+        onDrive={(h, c) => void startDrive(h, c)}
+        onSimulate={(h, c) => void startSim(h, c)}
+      />
       {error && (
         <div style={{ position: "fixed", bottom: 12, left: 12, right: 12, color: "var(--red)", fontSize: 13, textAlign: "center" }}>
           {error}

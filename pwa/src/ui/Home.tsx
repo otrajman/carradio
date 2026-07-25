@@ -2,10 +2,11 @@ import { useState } from "react";
 import { generateHandle } from "../protocol/handles";
 
 export function Home(props: {
-  onDrive: (handle: string) => void;
-  onSimulate: (handle: string) => void;
+  onDrive: (handle: string, convoyCode: string) => void;
+  onSimulate: (handle: string, convoyCode: string) => void;
 }) {
   const [handle] = useState(generateHandle);
+  const [convoyCode, setConvoyCode] = useState("");
   return (
     <div className="home">
       <div className="eyebrow">same-traffic voice</div>
@@ -16,12 +17,21 @@ export function Home(props: {
         Talk to the cars around you. Eyes up, hands on the wheel — nothing to read,
         nothing to find.
       </p>
-      <button className="btn-primary" onClick={() => props.onDrive(handle)}>
+      <button className="btn-primary" onClick={() => props.onDrive(handle, convoyCode)}>
         Start driving
       </button>
-      <button className="btn-quiet" onClick={() => props.onSimulate(handle)}>
+      <button className="btn-quiet" onClick={() => props.onSimulate(handle, convoyCode)}>
         Open simulator
       </button>
+      <input
+        className="convoy-input"
+        type="text"
+        placeholder="convoy code (optional — friends only)"
+        value={convoyCode}
+        onChange={(e) => setConvoyCode(e.target.value)}
+        autoCapitalize="none"
+        autoCorrect="off"
+      />
       <div className="handle-preview">
         this trip you are <b>{handle}</b>
       </div>

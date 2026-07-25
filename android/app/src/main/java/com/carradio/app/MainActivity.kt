@@ -100,6 +100,9 @@ private fun AppRoot() {
             onSkipMute = {
                 RadioService.sendAction(context, RadioService.ACTION_SKIP_MUTE)
             },
+            onReport = {
+                RadioService.sendAction(context, RadioService.ACTION_REPORT)
+            },
             onGoOnAir = { RadioService.start(context) },
             onGoOffAir = { RadioService.stop(context) },
             onOpenSettings = { showSettings = true },

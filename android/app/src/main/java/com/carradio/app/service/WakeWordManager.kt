@@ -15,6 +15,7 @@ import android.util.Log
  *
  * Continuous listen → on a final result containing "hey radio":
  *   "... mute"   → stealth-mute the last speaker
+ *   "... report" → report the last speaker (§8)
  *   "... repeat" → replay the last burst
  *   anything else → open the mic for a burst (recorder handles endpointing)
  *
@@ -25,7 +26,8 @@ class WakeWordManager(
     private val context: Context,
     private val onMute: () -> Unit,
     private val onRepeat: () -> Unit,
-    private val onTalk: () -> Unit
+    private val onTalk: () -> Unit,
+    private val onReport: () -> Unit = {}
 ) {
 
     private val handler = Handler(Looper.getMainLooper())
@@ -126,6 +128,7 @@ class WakeWordManager(
         val command = text.substring(idx + WAKE_PHRASE.length).trim()
         when {
             command.startsWith("mute") -> onMute()
+            command.startsWith("report") -> onReport()
             command.startsWith("repeat") -> onRepeat()
             else -> onTalk()
         }

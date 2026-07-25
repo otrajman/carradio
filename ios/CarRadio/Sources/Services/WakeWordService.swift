@@ -1,6 +1,7 @@
 // WakeWordService.swift
 // "Hey Radio" wake word via SFSpeechRecognizer (feature-flagged, PROTOCOL §0):
 //   - "hey radio, mute"    → mute the current/last speaker
+//   - "hey radio, report"  → report the current/last speaker (§8)
 //   - "hey radio, repeat"  → replay the last burst
 //   - "hey radio" + speech → record a burst until an endpointing pause
 // Prefers on-device recognition when available; degrades gracefully (service
@@ -18,6 +19,7 @@ import Speech
 final class WakeWordService: NSObject {
     enum Command {
         case mute
+        case report
         case repeatLast
         case startTalking
     }
@@ -137,6 +139,8 @@ final class WakeWordService: NSObject {
 
         if after.hasPrefix("mute") {
             trigger(.mute)
+        } else if after.hasPrefix("report") {
+            trigger(.report)
         } else if after.hasPrefix("repeat") {
             trigger(.repeatLast)
         } else if after.isEmpty {

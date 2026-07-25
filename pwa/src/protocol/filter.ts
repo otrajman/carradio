@@ -17,6 +17,8 @@ export interface ReceiverState {
   heading: number;
   speed: number; // m/s
   elastic: boolean;
+  /** §14: hashed convoy tag when in convoy mode, else null. */
+  convoyTag?: string | null;
 }
 
 export interface FilterDeps {
@@ -35,6 +37,17 @@ export function evaluateBurst(
   if (deps.hasSeen(p.message_id)) return "duplicate";
   // §5.3 mute
   if (deps.isMuted(p.trip_id)) return "muted";
+
+  // §14 convoy: members hear only each other (plus system alerts); outsiders
+  // never hear convoy traffic.
+  const burstTag = p.convoy ?? null;
+  const myTag = r.convoyTag ?? null;
+  if (myTag) {
+    if (burstTag === myTag) return "play";
+    if (p.kind !== "system") return "convoy";
+  } else if (burstTag) {
+    return "convoy";
+  }
 
   // §5.4 heading match — skipped for system bursts, slow receivers, elastic mode
   const skipHeading =

@@ -25,7 +25,9 @@ data class BurstPayload(
     val heading: Double = 0.0,
     val speed: Double = 0.0,
     @SerialName("h3_r9") val h3R9: String = "",
-    @SerialName("created_at") val createdAt: String = ""
+    @SerialName("created_at") val createdAt: String = "",
+    /** §14: present only in convoy mode (hashed invite code). */
+    val convoy: String? = null
 ) {
     val isSystem: Boolean get() = kind == KIND_SYSTEM
 

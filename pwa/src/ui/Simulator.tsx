@@ -75,6 +75,12 @@ export function Simulator(props: {
 
         <div className="sim-status">
           you are <b>{snap.handle}</b> on {props.route.name}
+          {engine.convoyTag && (
+            <>
+              {" "}
+              · <span className="badge-elastic">convoy</span>
+            </>
+          )}
           <br />
           {mph} mph · {snap.peers.length} in presence · rooms {snap.roomCells.length}
           {snap.elastic && (
@@ -110,6 +116,9 @@ export function Simulator(props: {
             </button>
             <button className="chip" onClick={() => void engine.skipAndMute()}>
               skip + mute
+            </button>
+            <button className="chip warn" onClick={() => void engine.reportCurrentOrLast()}>
+              report speaker
             </button>
           </div>
         </div>

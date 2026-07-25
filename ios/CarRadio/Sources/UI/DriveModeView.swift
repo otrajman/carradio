@@ -84,6 +84,15 @@ struct DriveModeView: View {
                 .kerning(1)
                 .foregroundStyle(.tertiary)
 
+            if model.currentSpeakerHandle != nil || model.lastSpeakerHandle != nil {
+                Button("Report speaker") {
+                    model.reportCurrentOrLast()
+                }
+                .font(.system(size: 12, weight: .semibold, design: .rounded))
+                .tint(.secondary)
+                .padding(.top, 2)
+            }
+
             if model.driveLocked {
                 PassengerChip {
                     model.passengerUnlock()

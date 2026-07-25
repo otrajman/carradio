@@ -34,6 +34,7 @@ public enum FilterVerdict: Equatable, Sendable {
     case dropSelf
     case dropDuplicate
     case dropMuted
+    case dropConvoy
     case dropHeading
     case dropDistance
 }
@@ -85,7 +86,8 @@ public final class BurstFilter {
         receiver: GpsState,
         muted: Set<String>,
         elasticMode: Bool,
-        isBreadcrumb: Bool = false
+        isBreadcrumb: Bool = false,
+        convoyTag: String? = nil
     ) -> FilterResult {
         // 1. Self
         if payload.tripID == receiverTripID {
@@ -101,6 +103,19 @@ public final class BurstFilter {
         // 3. Mute
         if muted.contains(payload.tripID) {
             return FilterResult(verdict: .dropMuted, passesStrict: false)
+        }
+
+        // §14 convoy: members hear only each other (plus system alerts);
+        // outsiders never hear convoy traffic.
+        if let myTag = convoyTag {
+            if payload.convoy == myTag {
+                return FilterResult(verdict: .play, passesStrict: false)
+            }
+            if !payload.isSystem {
+                return FilterResult(verdict: .dropConvoy, passesStrict: false)
+            }
+        } else if payload.convoy != nil {
+            return FilterResult(verdict: .dropConvoy, passesStrict: false)
         }
 
         // 4 + 5. Geometry. Elastic mode plays anything in the subscribed rooms,

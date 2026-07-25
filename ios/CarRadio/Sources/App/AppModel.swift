@@ -54,6 +54,15 @@ final class AppModel: ObservableObject {
     private var currentGps: GpsState?
     private var mutedTripIDs: Set<String> = []
     private var wakeWordRecording = false
+    /// §14: hashed convoy tag for this trip (from the start screen); nil = public mode.
+    private(set) var convoyTag: String? = ConvoyTag.fromCode(
+        UserDefaults.standard.string(forKey: "convoy_code")
+    )
+
+    /// Called from the start screen; takes effect for the next trip.
+    func setConvoyCode(_ code: String) {
+        convoyTag = ConvoyTag.fromCode(code)
+    }
 
     // Drive lock candidates
     private var lockCandidateSince: Date?
@@ -112,6 +121,30 @@ final class AppModel: ObservableObject {
             recorder.stop() // onFinished sends
         } else {
             startRecording(endpointOnSilence: false)
+        }
+    }
+
+    /// PROTOCOL §8 report: reports the playing (or last played) burst, stops it,
+    /// and mutes the sender locally. The sender is never notified.
+    func reportCurrentOrLast() {
+        guard phase == .live, let tripID else { return }
+        let payload = playback.skipCurrent() ?? playback.lastFinishedPayload
+        guard let payload, !payload.isSystem else { return }
+        mutedTripIDs.insert(payload.tripID)
+        if let reportedUUID = UUID(uuidString: payload.tripID) {
+            let messageUUID = UUID(uuidString: payload.messageID)
+            Task {
+                try? await supabase.insertReport(
+                    reporter: tripID,
+                    reported: reportedUUID,
+                    messageID: messageUUID
+                )
+            }
+        }
+        Task {
+            AudioSessionController.shared.beginPlayback()
+            await earcons.play(.muted)
+            AudioSessionController.shared.end()
         }
     }
 
@@ -176,6 +209,9 @@ final class AppModel: ObservableObject {
             case .mute:
                 self.skipAndMute()
                 self.wakeWord.startListening()
+            case .report:
+                self.reportCurrentOrLast()
+                self.wakeWord.startListening()
             case .repeatLast:
                 self.repeatLast()
                 self.wakeWord.startListening()
@@ -186,6 +222,7 @@ final class AppModel: ObservableObject {
 
         breadcrumbs.mutedTripIDs = { [weak self] in self?.mutedTripIDs ?? [] }
         breadcrumbs.isElastic = { [weak self] in self?.elastic.isElastic ?? false }
+        breadcrumbs.convoyTag = { [weak self] in self?.convoyTag }
 
         // Mirror playback state.
         playback.$isPlaying
@@ -274,7 +311,8 @@ final class AppModel: ObservableObject {
             receiverTripID: tripID.uuidString.lowercased(),
             receiver: gps,
             muted: mutedTripIDs,
-            elasticMode: elastic.isElastic
+            elasticMode: elastic.isElastic,
+            convoyTag: convoyTag
         )
         if result.passesStrict {
             elastic.noteStrictFilterPass()
@@ -313,7 +351,8 @@ final class AppModel: ObservableObject {
                 fileURL: url,
                 tripID: tripID,
                 handle: currentHandle,
-                state: gps
+                state: gps,
+                convoyTag: convoyTag
             )
         }
     }

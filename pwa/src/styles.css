@@ -104,6 +104,30 @@ button {
 }
 .home .get-apps a { color: var(--text); text-decoration-color: var(--amber-dim); }
 .home .get-apps a:hover { color: var(--amber); }
+.convoy-input {
+  margin-top: 10px;
+  background: var(--panel);
+  border: 1px solid var(--edge);
+  border-radius: 10px;
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 13px;
+  padding: 10px 14px;
+  width: min(320px, 80vw);
+  text-align: center;
+}
+.convoy-input:focus { outline: none; border-color: var(--amber-dim); }
+.convoy-input::placeholder { color: var(--dim); }
+.report-chip {
+  color: var(--dim);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  padding: 8px 14px;
+  border: 1px solid var(--edge);
+  border-radius: 999px;
+}
+.report-chip:active { color: var(--red); border-color: var(--red); }
 
 /* ---------- drive mode ---------- */
 .drive {

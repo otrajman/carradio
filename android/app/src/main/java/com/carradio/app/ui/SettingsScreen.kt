@@ -12,7 +12,9 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -28,6 +30,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.carradio.app.CarRadioApp
 import com.carradio.app.Constants
 import com.carradio.app.service.RadioState
+import com.carradio.app.ui.theme.RadioDim
 import com.carradio.app.ui.theme.RadioGreen
 import com.carradio.app.ui.theme.RadioTextDim
 import kotlinx.coroutines.launch
@@ -41,6 +44,7 @@ fun SettingsScreen(onBack: () -> Unit) {
     val wakeWord by settings.wakeWordEnabled.collectAsStateWithLifecycle(initialValue = true)
     val synthetic by settings.syntheticNodesEnabled.collectAsStateWithLifecycle(initialValue = true)
     val fakeGps by settings.fakeGpsEnabled.collectAsStateWithLifecycle(initialValue = false)
+    val convoyCode by settings.convoyCode.collectAsStateWithLifecycle(initialValue = "")
     val handle by RadioState.handle.collectAsStateWithLifecycle()
     val serviceRunning by RadioState.serviceRunning.collectAsStateWithLifecycle()
 
@@ -86,6 +90,28 @@ fun SettingsScreen(onBack: () -> Unit) {
                     "Takes effect the next time you go on air.",
                 checked = fakeGps,
                 onChange = { scope.launch { settings.setFakeGpsEnabled(it) } }
+            )
+
+            Spacer(Modifier.height(20.dp))
+            Text(
+                text = "Convoy code",
+                fontSize = 14.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = RadioTextDim
+            )
+            Spacer(Modifier.height(6.dp))
+            OutlinedTextField(
+                value = convoyCode,
+                onValueChange = { scope.launch { settings.setConvoyCode(it) } },
+                placeholder = { Text("optional — friends only", color = RadioDim) },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth()
+            )
+            Text(
+                text = "With a code set, you talk and listen only to drivers using the same " +
+                    "code. Leave empty for public traffic. Takes effect next time you go on air.",
+                fontSize = 12.sp,
+                color = RadioDim
             )
 
             Spacer(Modifier.height(28.dp))

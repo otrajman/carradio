@@ -59,6 +59,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 fun DriveModeScreen(
     onToggleTalk: () -> Unit,
     onSkipMute: () -> Unit,
+    onReport: () -> Unit,
     onGoOnAir: () -> Unit,
     onGoOffAir: () -> Unit,
     onOpenSettings: () -> Unit,
@@ -163,6 +164,17 @@ fun DriveModeScreen(
                 color = RadioDim,
                 textAlign = TextAlign.Center
             )
+            if (serviceRunning && lastSpeaker != null) {
+                Text(
+                    text = "Report speaker",
+                    fontSize = 13.sp,
+                    color = RadioDim,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier
+                        .padding(top = 8.dp)
+                        .clickable { onReport() }
+                )
+            }
         }
     }
 }

@@ -25,7 +25,13 @@ final class SendPipeline {
     /// caller's UX proceeds. Returns true if the burst actually went out
     /// (false = shadowbanned pretend-send or error).
     @discardableResult
-    func sendBurst(fileURL: URL, tripID: UUID, handle: String, state: GpsState) async -> Bool {
+    func sendBurst(
+        fileURL: URL,
+        tripID: UUID,
+        handle: String,
+        state: GpsState,
+        convoyTag: String? = nil
+    ) async -> Bool {
         // 1. Shadowban check FIRST. On RPC failure, assume not banned.
         if await isShadowbanned(tripID: tripID) {
             // Pretend to send: play the sent earcon, skip steps 2-4 (§4.1, §8).
@@ -59,7 +65,8 @@ final class SendPipeline {
                 lat: state.lat,
                 lng: state.lng,
                 heading: state.heading,
-                speed: state.speed
+                speed: state.speed,
+                convoyTag: convoyTag
             )
 
             // 4. Broadcast to the publish set.
@@ -75,7 +82,8 @@ final class SendPipeline {
                 heading: state.heading,
                 speed: state.speed,
                 h3R9: h3r9,
-                createdAt: WireDate.string(from: Date())
+                createdAt: WireDate.string(from: Date()),
+                convoy: convoyTag
             )
             let rooms = RoomManager.publishRooms(
                 lat: state.lat, lng: state.lng,

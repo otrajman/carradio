@@ -16,6 +16,7 @@ class BurstFilter(
         DROP_SELF,
         DROP_DUPLICATE,
         DROP_MUTED,
+        DROP_CONVOY,
         DROP_HEADING,
         DROP_DISTANCE
     }
@@ -26,7 +27,9 @@ class BurstFilter(
         val lat: Double,
         val lng: Double,
         val heading: Double,
-        val speedMps: Double
+        val speedMps: Double,
+        /** §14: hashed convoy tag when in convoy mode, else null. */
+        val convoyTag: String? = null
     )
 
     companion object {
@@ -76,6 +79,16 @@ class BurstFilter(
 
         // 3. Mute
         if (burst.tripId in mutedTrips) return Decision.DROP_MUTED
+
+        // §14 convoy: members hear only each other (plus system alerts); outsiders
+        // never hear convoy traffic.
+        val myTag = receiver.convoyTag
+        if (myTag != null) {
+            if (burst.convoy == myTag) return Decision.PLAY
+            if (!burst.isSystem) return Decision.DROP_CONVOY
+        } else if (burst.convoy != null) {
+            return Decision.DROP_CONVOY
+        }
 
         return geometryDecision(burst, receiver, elasticMode)
     }

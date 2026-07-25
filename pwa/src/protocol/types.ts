@@ -13,6 +13,8 @@ export interface BurstPayload {
   speed: number; // m/s
   h3_r9: string;
   created_at: string;
+  /** §14: present only in convoy mode (hashed invite code). */
+  convoy?: string | null;
 }
 
 export interface GpsFix {
@@ -42,6 +44,7 @@ export type DropReason =
   | "self"
   | "duplicate"
   | "muted"
+  | "convoy"
   | "heading"
   | "out-of-cone"
   | "stale";

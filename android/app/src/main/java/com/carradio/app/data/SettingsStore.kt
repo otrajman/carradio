@@ -29,6 +29,13 @@ class SettingsStore(private val context: Context) {
     val syntheticNodesEnabled: Flow<Boolean> =
         context.dataStore.data.map { it[KEY_SYNTHETIC] ?: true }
 
+    val convoyCode: Flow<String> =
+        context.dataStore.data.map { it[KEY_CONVOY_CODE] ?: "" }
+
+    suspend fun setConvoyCode(code: String) {
+        context.dataStore.edit { it[KEY_CONVOY_CODE] = code }
+    }
+
     val fakeGpsEnabled: Flow<Boolean> =
         context.dataStore.data.map { it[KEY_FAKE_GPS] ?: false }
 
@@ -80,6 +87,7 @@ class SettingsStore(private val context: Context) {
         private val KEY_WAKEWORD = booleanPreferencesKey("feature_wakeword")
         private val KEY_SYNTHETIC = booleanPreferencesKey("feature_synthetic_nodes")
         private val KEY_FAKE_GPS = booleanPreferencesKey("feature_fake_gps")
+        private val KEY_CONVOY_CODE = stringPreferencesKey("convoy_code")
         private val KEY_TRIP_ID = stringPreferencesKey("trip_id")
         private val KEY_TRIP_HANDLE = stringPreferencesKey("trip_handle")
         private val KEY_TRIP_CREATED_AT = longPreferencesKey("trip_created_at")

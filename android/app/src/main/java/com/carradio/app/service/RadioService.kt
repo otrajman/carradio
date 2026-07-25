@@ -30,6 +30,7 @@ import com.carradio.app.core.BurstPayload
 import com.carradio.app.core.ElasticModeTracker
 import com.carradio.app.core.HandleGenerator
 import com.carradio.app.data.Repository
+import com.carradio.app.core.ConvoyTag
 import com.carradio.app.data.SettingsStore
 import com.carradio.app.data.SupabaseClientProvider
 import kotlinx.coroutines.CoroutineScope
@@ -73,6 +74,8 @@ class RadioService : Service() {
     private lateinit var roomManager: RoomManager
     private lateinit var breadcrumbs: BreadcrumbManager
     private lateinit var wakeWord: WakeWordManager
+    /** §14: hashed convoy tag for this trip; null = public mode. */
+    private var convoyTag: String? = null
     private var mediaSession: MediaSession? = null
     private var locationEngine: LocationEngine? = null
 
@@ -160,7 +163,8 @@ class RadioService : Service() {
             context = this,
             onMute = { scope.launch { muteTrip(RadioState.lastSpeakerTripId.value) } },
             onRepeat = { playbackQueue.replayLast() },
-            onTalk = { if (!recorder.isRecording) toggleTalk(autoStop = true) }
+            onTalk = { if (!recorder.isRecording) toggleTalk(autoStop = true) },
+            onReport = { reportCurrentOrLast() }
         )
 
         createMediaSession()
@@ -170,6 +174,7 @@ class RadioService : Service() {
         when (intent?.action) {
             ACTION_TOGGLE_TALK -> toggleTalk(autoStop = false)
             ACTION_SKIP_MUTE -> skipAndMute()
+            ACTION_REPORT -> reportCurrentOrLast()
             ACTION_PASSENGER_OVERRIDE -> {
                 passengerOverride = true
                 RadioState.driveLocked.value = false
@@ -220,6 +225,7 @@ class RadioService : Service() {
             .launchIn(scope)
 
         scope.launch {
+            convoyTag = ConvoyTag.fromCode(settings.convoyCode.first())
             ensureTrip()
             val fake = settings.fakeGpsEnabled.first()
             locationEngine = LocationEngine(this@RadioService, scope, fake) { fix -> onFix(fix) }
@@ -313,7 +319,8 @@ class RadioService : Service() {
             lat = fix.lat,
             lng = fix.lng,
             heading = fix.headingDeg,
-            speedMps = fix.speedMps
+            speedMps = fix.speedMps,
+            convoyTag = convoyTag
         )
     }
 
@@ -388,7 +395,8 @@ class RadioService : Service() {
                 heading = fix.headingDeg,
                 speed = fix.speedMps,
                 h3R9 = h3r9,
-                createdAt = Instant.now().toString()
+                createdAt = Instant.now().toString(),
+                convoy = convoyTag
             )
 
             // §4.3 — breadcrumb insert.
@@ -414,6 +422,25 @@ class RadioService : Service() {
             val current = playbackQueue.skipCurrent()
             val target = current ?: playbackQueue.lastPlayed
             muteTrip(target?.tripId)
+        }
+    }
+
+    /**
+     * PROTOCOL §8 report: reports the playing (or last played) burst, stops it, and
+     * mutes the sender locally. The sender is never notified.
+     */
+    fun reportCurrentOrLast() {
+        scope.launch {
+            val reporter = tripId ?: return@launch
+            val target = playbackQueue.skipCurrent() ?: playbackQueue.lastPlayed ?: return@launch
+            if (target.tripId == reporter) return@launch
+            filter.mute(target.tripId)
+            earcons.muted()
+            repository.insertReport(
+                reporterTripId = reporter,
+                reportedTripId = target.tripId,
+                messageId = target.messageId
+            )
         }
     }
 
@@ -547,6 +574,7 @@ class RadioService : Service() {
 
         const val ACTION_TOGGLE_TALK = "com.carradio.app.action.TOGGLE_TALK"
         const val ACTION_SKIP_MUTE = "com.carradio.app.action.SKIP_MUTE"
+        const val ACTION_REPORT = "com.carradio.app.action.REPORT"
         const val ACTION_PASSENGER_OVERRIDE = "com.carradio.app.action.PASSENGER_OVERRIDE"
         const val ACTION_STOP = "com.carradio.app.action.STOP"
 

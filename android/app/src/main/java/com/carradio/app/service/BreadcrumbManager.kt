@@ -60,7 +60,8 @@ class BreadcrumbManager(
             lng = fix.lng,
             radiusM = radius,
             sinceHours = 24,
-            limit = 10
+            limit = 10,
+            convoyTag = receiver.convoyTag
         )
         if (rows.isEmpty()) return
 
