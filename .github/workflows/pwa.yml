@@ -29,7 +29,8 @@ jobs:
       - run: npm test
       - run: npm run build
         env:
-          PWA_BASE: /carradio/
+          # Custom domain (car-radio.live) serves from the root
+          PWA_BASE: /
       - uses: actions/upload-pages-artifact@v3
         with: { path: pwa/dist }
 

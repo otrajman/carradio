@@ -28,7 +28,7 @@ Supabase URL/key are baked as demo defaults in `src/config.ts`; override with
 ## Hosting / CI
 
 - **Public demo**: deployed to GitHub Pages by `.github/workflows/pwa.yml` on every push
-  to `main` touching `pwa/` → <https://otrajman.github.io/carradio/>. The alias
+  to `main` touching `pwa/` → <https://car-radio.live/>. The alias
   `https://trstelgemjdeqqdlasgw.supabase.co/functions/v1/app` 302-redirects there
   (the Supabase gateway rewrites HTML responses to text/plain, so direct edge hosting
   doesn't work — `vite.hosted.config.ts` + `supabase/functions/deploy-asset` remain

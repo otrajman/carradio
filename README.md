@@ -1,6 +1,6 @@
 # Car Radio
 
-**Live demo: <https://otrajman.github.io/carradio/>** · [Android APK](https://github.com/otrajman/carradio/releases/download/latest-builds/carradio-debug.apk) · [all dev builds](https://github.com/otrajman/carradio/releases/tag/latest-builds)
+**Live demo: <https://car-radio.live/>** · [Android APK](https://github.com/otrajman/carradio/releases/download/latest-builds/carradio-debug.apk) · [all dev builds](https://github.com/otrajman/carradio/releases/tag/latest-builds)
 
 Hyper-local, ephemeral voice chat for drivers in the same traffic. Spec: `prd.md`.
 Wire protocol shared by all clients: `docs/PROTOCOL.md` (read this first — it also lists
@@ -17,7 +17,7 @@ every judgment call where v1 deviates from the PRD and why).
 
 ## Demo in 60 seconds
 
-Open **<https://otrajman.github.io/carradio/>** (Chrome recommended), or run locally:
+Open **<https://car-radio.live/>** (Chrome recommended), or run locally:
 
 ```bash
 cd pwa

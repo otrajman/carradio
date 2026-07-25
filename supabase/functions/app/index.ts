@@ -3,6 +3,6 @@
 Deno.serve(() =>
   new Response(null, {
     status: 302,
-    headers: { Location: "https://otrajman.github.io/carradio/" },
+    headers: { Location: "https://car-radio.live/" },
   })
 );
