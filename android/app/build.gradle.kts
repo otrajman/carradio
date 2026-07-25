@@ -68,40 +68,9 @@ android {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
             excludes += "/META-INF/INDEX.LIST"
             excludes += "/META-INF/io.netty.versions.properties"
-            // h3 jar's desktop natives — never loadable on Android
-            excludes += "/darwin-*/**"
-            excludes += "/windows-*/**"
-            excludes += "/linux-*/**"
-            excludes += "/android-arm*/**" // repackaged as jniLibs by extractH3Natives
-        }
-    }
-
-    sourceSets {
-        getByName("main") {
-            jniLibs.srcDir(layout.buildDirectory.dir("generated/h3JniLibs"))
         }
     }
 }
-
-// h3-java bundles its Android natives as jar resources and loads them by extracting
-// to app storage — which modern Android (SELinux W^X, targetSdk 29+) forbids. Repackage
-// them as proper jniLibs so H3Core.newSystemInstance() can System.loadLibrary them.
-val extractH3Natives = tasks.register<Copy>("extractH3Natives") {
-    val h3Jar = configurations.named("releaseRuntimeClasspath").map { config ->
-        config.incoming.artifactView { }.files.single { it.name.startsWith("h3-") && it.extension == "jar" }
-    }
-    from(h3Jar.map { zipTree(it) }) {
-        include("android-arm64/libh3-java.so", "android-arm/libh3-java.so")
-        eachFile {
-            path = if (path.startsWith("android-arm64")) "arm64-v8a/libh3-java.so"
-            else "armeabi-v7a/libh3-java.so"
-        }
-        includeEmptyDirs = false
-    }
-    into(layout.buildDirectory.dir("generated/h3JniLibs"))
-}
-
-tasks.named("preBuild") { dependsOn(extractH3Natives) }
 
 dependencies {
     implementation(libs.androidx.core.ktx)
@@ -127,8 +96,6 @@ dependencies {
     implementation(libs.supabase.storage)
     implementation(libs.supabase.realtime)
     implementation(libs.ktor.client.okhttp)
-
-    implementation(libs.uber.h3)
 
     implementation(libs.media3.exoplayer)
     implementation(libs.media3.session)

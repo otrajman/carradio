@@ -9,9 +9,8 @@ backend.
 
 - Android Studio Hedgehog/Iguana or newer (AGP 8.2.x, Java 17)
 - Android SDK 34
-- A device (or emulator) on **API 29+**. A real **arm64 device is strongly recommended** —
-  the Uber H3 native library ships arm binaries; x86_64 emulators may run in a degraded
-  "no rooms" mode (see Known limitations).
+- A device (or emulator) on **API 29+**. H3 cell math is a pure-Kotlin port (`core/H3Lite.kt`),
+  so all ABIs — including x86_64 emulators and 16KB page-size devices — work identically.
 
 ## Build
 
@@ -60,6 +59,7 @@ app/src/main/java/com/carradio/app/
 │   ├── BurstPayload.kt          #   §3 wire payload
 │   ├── GeoMath.kt               #   haversine/bearing/senderRadius/destination point
 │   ├── RoomMath.kt              #   §3 publish fan-out (H3 injected as lambda)
+│   ├── H3Lite.kt, H3LiteTables.kt #  pure-Kotlin H3 port (latLngToCell + gridDisk), fixture-validated vs h3-js
 │   ├── ElasticModeTracker.kt    #   §7 density fallback
 │   └── HandleGenerator.kt       #   §1 handles (word lists verbatim from docs/handles.json)
 ├── data/                        # Supabase I/O (PostgREST, Storage, RPCs, edge fn) + DataStore
@@ -71,9 +71,6 @@ app/src/main/java/com/carradio/app/
 
 ## Known limitations
 
-- **H3 natives on emulators**: `com.uber:h3` bundles JNI binaries; Android arm64/arm32 are
-  covered, x86/x86_64 emulator images may fail to load. The app then disables rooms and
-  shows "H3 unavailable" instead of crashing. Test on a physical device.
 - **Forward fan-out to unsubscribed rooms** uses supabase-kt's HTTP broadcast fallback for
   channels that were never joined (verified present in the 2.6.1 artifact). Any per-cell
   failure is caught and logged; receivers still get most traffic via their k-ring 1

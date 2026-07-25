@@ -1,5 +1,22 @@
 # HANDOFF — Android client
 
+**2026-07 update — native h3-java removed.** The `com.uber:h3` JNI dependency is gone: its
+prebuilt `.so` files are 4KB-aligned and cannot load on 16KB page-size devices (e.g. Galaxy
+Z Fold 7 / Android 15+ 16KB mode). H3 cell math is now a pure-Kotlin port —
+`core/H3Lite.kt` + `core/H3LiteTables.kt`, mechanically ported from the verified Swift
+implementation in `ios/CarRadio/Sources/Core/H3Lite(.Tables).swift` — exposing
+`latLngToCell` (canonical lowercase hex, identical to h3-js) and pentagon-safe `gridDisk`.
+`service/H3Provider` keeps its old public API (`isAvailable` is now always `true`;
+`cellAddress`; `gridDisk`) but does no native loading; the `extractH3Natives` Gradle task,
+h3 jniLibs sourceSet, h3 packaging excludes, and the h3 catalog entry were all removed.
+Validated by `H3LiteTest` against `app/src/test/resources/h3_fixtures.json` — 2,720
+latLngToCell cases (res 7-9 random global points plus pole/equator/antimeridian extremes at
+res 0-15) and 1,008 gridDisk cases (k=1..3 at res 7-9, covering all 36 res-7/8/9 pentagons
+and every pentagon neighbor), all generated from official h3-js v4 by
+`android/tools/gen-h3-fixtures.mjs` (rerun it with node if H3Lite is ever edited; gridDisk
+fixtures are compared as sorted sets since H3Lite's BFS order differs from h3-js spiral
+order). The former "x86_64 emulators degrade to no-rooms mode" caveat no longer applies.
+
 State: complete and carefully reviewed. **The full app was never compiled** (no Android SDK
 on the authoring machine), but two meaningful verification passes were done:
 
@@ -67,10 +84,8 @@ Tests (pure JVM): `BurstFilterTest` (18 cases incl. protocol anchor values), `Ha
     `presenceChangeFlow` are top-level in the same package ✓; `Realtime.removeChannel` ✓
   - `RealtimeChannelImpl.broadcast` contains an HTTP `broadcastUrl`/`BroadcastApiBody` path —
     the forward fan-out to never-joined channels (RoomManager) has a real fallback ✓
-- **h3 4.1.1**: `newInstance(OperatingSystem, String)`, `latLngToCellAddress`,
-  `gridDisk(String, int)` all exist ✓. Bundled Android natives are exactly
-  `/android-arm64/` and `/android-arm/` — `H3Provider` maps arm64-v8a→"arm64",
-  armeabi-v7a→"arm"; x86/x86_64 emulators degrade to no-rooms mode by design.
+- **h3**: *(historical — h3-java has since been replaced by the pure-Kotlin `core/H3Lite`,
+  see the 2026-07 note at the top; the fixture suite in `H3LiteTest` is the verification.)*
 - **core/ + tests**: compile under kotlinc (1.9 language level) and 31/31 tests pass.
 
 ## Unverified — check these first if something misbehaves
@@ -100,4 +115,5 @@ Tests (pure JVM): `BurstFilterTest` (18 cases incl. protocol anchor values), `Ha
 - Mute of a *system* sender inserts a `mute_events` row only if the synthetic trip exists in
   `trips`; local synthetic bursts use the fake trip id `"synthetic-node"`, and `muteTrip` on
   it will fail the FK insert silently (caught) — locally it still mutes.
-- On x86_64 emulators without H3: rooms/breadcrumbs off, mic/earcons/UI still demoable.
+- ~~On x86_64 emulators without H3: rooms/breadcrumbs off, mic/earcons/UI still demoable.~~
+  (Obsolete: H3 is pure Kotlin now and works on every ABI.)

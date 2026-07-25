@@ -10,9 +10,6 @@
 -keepclassmembers class com.carradio.app.** { *** Companion; }
 -keepclasseswithmembers class com.carradio.app.** { kotlinx.serialization.KSerializer serializer(...); }
 
-# Uber H3 loads native libraries from jar resources by name.
--keep class com.uber.h3core.** { *; }
-
 # Ktor / OkHttp
 -dontwarn org.slf4j.**
 -dontwarn okhttp3.**

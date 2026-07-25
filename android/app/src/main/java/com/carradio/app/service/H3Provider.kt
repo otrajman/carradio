@@ -1,90 +1,29 @@
 package com.carradio.app.service
 
-import android.os.Build
-import android.util.Log
-import com.uber.h3core.H3Core
-import com.uber.h3core.H3CoreLoader
+import com.carradio.app.core.H3Lite
 
 /**
- * Lazy holder for Uber H3 (native JNI bindings, com.uber:h3:4.1.1).
+ * H3 cell math for rooms/breadcrumbs, backed by the pure-Kotlin port in
+ * [H3Lite] (validated against official h3-js v4 fixtures — see H3LiteTest).
  *
- * H3Core.newInstance() auto-detects the OS from os.name — which reports "Linux" on Android
- * and would load glibc binaries. We therefore try the explicit Android natives first for
- * each supported ABI, then fall back to auto-detection. If nothing loads (e.g. an x86_64
- * emulator without bundled natives) the app degrades: no rooms/breadcrumbs, status message
- * shown, everything else keeps running.
+ * This used to load the native h3-java JNI bindings (com.uber:h3), but those
+ * prebuilt .so files are 4KB-aligned and cannot load on 16KB page-size devices
+ * (e.g. Galaxy Z Fold 7 / Android 15+ 16KB mode). The pure-Kotlin port removes
+ * the native dependency entirely, so H3 is now always available.
  */
 object H3Provider {
 
-    @Volatile
-    private var core: H3Core? = null
-
-    @Volatile
-    private var failed = false
-
+    /** Always true — no native library to load anymore. */
     val isAvailable: Boolean
-        get() = get() != null
+        get() = true
 
-    fun get(): H3Core? {
-        core?.let { return it }
-        if (failed) return null
-        synchronized(this) {
-            core?.let { return it }
-            if (failed) return null
-            val loaded = load()
-            if (loaded == null) failed = true
-            core = loaded
-            return loaded
-        }
-    }
-
-    /** Lowercase-hex cell address at the given resolution, or null when H3 is unavailable. */
+    /** Lowercase-hex cell address at the given resolution, or null for invalid input. */
     fun cellAddress(lat: Double, lng: Double, res: Int): String? = try {
-        get()?.latLngToCellAddress(lat, lng, res)?.lowercase()
-    } catch (e: Exception) {
-        Log.w(TAG, "latLngToCellAddress failed", e)
+        H3Lite.latLngToCell(lat, lng, res)
+    } catch (e: IllegalArgumentException) {
         null
     }
 
     /** K-ring (grid disk) of cell addresses, including the origin. */
-    fun gridDisk(cellAddress: String, k: Int): List<String> = try {
-        get()?.gridDisk(cellAddress, k)?.map { it.lowercase() } ?: emptyList()
-    } catch (e: Exception) {
-        Log.w(TAG, "gridDisk failed", e)
-        emptyList()
-    }
-
-    private fun load(): H3Core? {
-        // Primary path: libh3-java.so ships as a proper jniLib (repackaged from the h3 jar
-        // by the extractH3Natives Gradle task), so System.loadLibrary works. The old
-        // extract-to-storage paths below can never work on targetSdk 29+ (SELinux blocks
-        // loading from app-writable storage) and remain only as a last resort.
-        try {
-            return H3Core.newSystemInstance()
-        } catch (t: Throwable) {
-            Log.d(TAG, "H3 system load failed: ${t.message}")
-        }
-        val archCandidates = Build.SUPPORTED_ABIS.orEmpty().mapNotNull { abi ->
-            when (abi) {
-                "arm64-v8a" -> "arm64"
-                "armeabi-v7a" -> "arm"
-                else -> null
-            }
-        }.distinct()
-        for (arch in archCandidates) {
-            try {
-                return H3Core.newInstance(H3CoreLoader.OperatingSystem.ANDROID, arch)
-            } catch (t: Throwable) {
-                Log.d(TAG, "H3 android/$arch load failed: ${t.message}")
-            }
-        }
-        return try {
-            H3Core.newInstance()
-        } catch (t: Throwable) {
-            Log.e(TAG, "H3 native library unavailable on this device", t)
-            null
-        }
-    }
-
-    private const val TAG = "H3Provider"
+    fun gridDisk(cellAddress: String, k: Int): List<String> = H3Lite.gridDisk(cellAddress, k)
 }

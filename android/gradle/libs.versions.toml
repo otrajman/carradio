@@ -7,7 +7,6 @@ coroutines = "1.8.0"
 serializationJson = "1.6.3"
 ktor = "2.3.12"
 supabase = "2.6.1"
-h3 = "4.1.1"
 media3 = "1.3.1"
 carApp = "1.4.0"
 datastore = "1.0.0"
@@ -42,8 +41,6 @@ supabase-postgrest = { group = "io.github.jan-tennert.supabase", name = "postgre
 supabase-storage = { group = "io.github.jan-tennert.supabase", name = "storage-kt" }
 supabase-realtime = { group = "io.github.jan-tennert.supabase", name = "realtime-kt" }
 ktor-client-okhttp = { group = "io.ktor", name = "ktor-client-okhttp", version.ref = "ktor" }
-
-uber-h3 = { group = "com.uber", name = "h3", version.ref = "h3" }
 
 media3-exoplayer = { group = "androidx.media3", name = "media3-exoplayer", version.ref = "media3" }
 media3-session = { group = "androidx.media3", name = "media3-session", version.ref = "media3" }
