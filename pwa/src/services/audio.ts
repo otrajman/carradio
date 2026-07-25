@@ -198,11 +198,11 @@ export class PlayQueue {
         u.pitch = 1.0;
         if (ranked.length) u.voice = ranked[0];
       } else {
-        // Deterministic per-sender voice from the GOOD voices only, with mild
-        // variation — extreme pitch shifts are what make TTS sound robotic.
+        // Distinct real voices per sender, left unwarped — pitch-shifting is
+        // what makes good voices sound synthetic. Only a whisper of rate variety.
         if (ranked.length) u.voice = ranked[item.voiceSeed % ranked.length];
-        u.pitch = 0.94 + (item.voiceSeed % 4) * 0.045; // 0.94–1.08
-        u.rate = 0.98 + (item.voiceSeed % 3) * 0.04; // 0.98–1.06
+        u.pitch = 1.0;
+        u.rate = 1.0 + (item.voiceSeed % 3) * 0.03; // 1.00–1.06
       }
       this.currentUtterance = u;
       u.onend = () => {
@@ -234,10 +234,12 @@ function rankedVoices(): SpeechSynthesisVoice[] {
     if (n.includes("espeak") || n.includes("espeak-ng")) return 9;
     return 5;
   };
-  voiceCache = [...all].sort((a, b) => score(a) - score(b));
-  // drop the espeak tier entirely when anything better exists
-  const good = voiceCache.filter((v) => score(v) < 9);
-  if (good.length) voiceCache = good;
+  const sorted = [...all].sort((a, b) => score(a) - score(b));
+  const best = score(sorted[0] ?? ({ name: "" } as SpeechSynthesisVoice));
+  // Keep only the best tier when a good one exists: cycling bots through
+  // mediocre voices for "variety" sounds worse than three great voices.
+  voiceCache = best <= 1 ? sorted.filter((v) => score(v) <= 1) : sorted.filter((v) => score(v) < 9);
+  if (!voiceCache.length) voiceCache = sorted;
   return voiceCache;
 }
 if ("speechSynthesis" in window) {

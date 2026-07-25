@@ -48,9 +48,8 @@ async function fetchWeatherScripts(lat: number, lng: number): Promise<string[]> 
       .filter((f: any) => ["Extreme", "Severe", "Moderate"].includes(f.properties?.severity))
       .map((f: any) => {
         const p = f.properties;
-        const event = p.event ?? "Weather alert";
-        const headline = (p.headline ?? "").split(" by ")[0];
-        return `System alert: ${event} in effect for this area. ${headline}. Drive carefully.`.slice(0, 580);
+        const event = p.event ?? "weather alert";
+        return `Heads up — ${event} in this area.`.slice(0, 200);
       });
   } catch {
     return [];
@@ -68,11 +67,13 @@ async function fetchTriviaScripts(lat: number, lng: number): Promise<string[]> {
     const page = pages[Math.floor(pages.length / 2)]; // avoid always picking the same top hit
     const exUrl =
       `https://en.wikipedia.org/w/api.php?action=query&prop=extracts&exintro&explaintext` +
-      `&exsentences=2&pageids=${page.pageid}&format=json&origin=*`;
+      `&exsentences=1&pageids=${page.pageid}&format=json&origin=*`;
     const ex = await (await fetch(exUrl)).json();
-    const extract = ex?.query?.pages?.[page.pageid]?.extract ?? "";
-    if (!extract) return [];
-    return [`Local note: you're passing near ${page.title}. ${extract}`.slice(0, 580)];
+    let extract: string = ex?.query?.pages?.[page.pageid]?.extract ?? "";
+    // keep it to one breath
+    if (extract.length > 160) extract = extract.slice(0, 157).replace(/[,;: ]+\S*$/, "") + "…";
+    if (!extract) return [`You're passing ${page.title}.`];
+    return [`You're passing ${page.title} — ${extract}`.slice(0, 220)];
   } catch {
     return [];
   }

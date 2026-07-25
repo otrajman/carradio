@@ -156,17 +156,17 @@ export class RadioEngine {
       const peers = this.collectPeers().filter((p) => p.kind !== "system").length;
       const around =
         peers === 0
-          ? "The road is quiet right now — you'll hear drivers as they come into range."
+          ? "Quiet out here right now."
           : peers === 1
-            ? "There's one driver in range."
-            : `There are ${peers} drivers in range.`;
+            ? "One driver nearby."
+            : `${peers} drivers nearby.`;
       this.queue.enqueue({
         messageId: `welcome-${crypto.randomUUID()}`,
         tripId: "system-welcome",
         handle: "Radio Tower",
         kind: "system",
         audioPath: null,
-        text: `Welcome to Car Radio. You're on air as ${this.handle}. ${around} Tap the ring to talk, swipe down to skip.`,
+        text: `You're on the air as ${this.handle}. ${around}`,
         createdAt: new Date().toISOString(),
         isBreadcrumb: false,
         voiceSeed: 0,
