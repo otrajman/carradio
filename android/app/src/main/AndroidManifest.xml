@@ -58,7 +58,9 @@
             android:exported="true">
             <intent-filter>
                 <action android:name="androidx.car.app.CarAppService" />
-                <category android:name="androidx.car.app.category.COMMUNICATION" />
+                <!-- COMMUNICATION was retired in car-app-library 1.3; CALLING is the
+                     supported category closest to a live voice walkie-talkie. -->
+                <category android:name="androidx.car.app.category.CALLING" />
             </intent-filter>
         </service>
     </application>
