@@ -14,6 +14,7 @@ import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
@@ -95,6 +96,7 @@ fun DriveModeScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .safeDrawingPadding() // SDK 35 is edge-to-edge; keep HUD below the status bar
                 .padding(24.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {

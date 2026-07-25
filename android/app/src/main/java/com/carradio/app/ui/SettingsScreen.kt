@@ -2,6 +2,7 @@ package com.carradio.app.ui
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -52,6 +53,7 @@ fun SettingsScreen(onBack: () -> Unit) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .safeDrawingPadding()
                 .verticalScroll(rememberScrollState())
                 .padding(24.dp)
         ) {

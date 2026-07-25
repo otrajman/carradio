@@ -10,6 +10,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -122,6 +123,7 @@ private fun PermissionGate(onRequest: () -> Unit) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .safeDrawingPadding()
                 .padding(32.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center

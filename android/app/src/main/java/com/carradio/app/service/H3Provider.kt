@@ -55,9 +55,15 @@ object H3Provider {
     }
 
     private fun load(): H3Core? {
-        // The h3-4.1.1 jar bundles exactly two Android natives: /android-arm64/ and
-        // /android-arm/ (verified against the Maven Central artifact). x86/x86_64 emulator
-        // images have no Android natives and will fall through to degraded mode.
+        // Primary path: libh3-java.so ships as a proper jniLib (repackaged from the h3 jar
+        // by the extractH3Natives Gradle task), so System.loadLibrary works. The old
+        // extract-to-storage paths below can never work on targetSdk 29+ (SELinux blocks
+        // loading from app-writable storage) and remain only as a last resort.
+        try {
+            return H3Core.newSystemInstance()
+        } catch (t: Throwable) {
+            Log.d(TAG, "H3 system load failed: ${t.message}")
+        }
         val archCandidates = Build.SUPPORTED_ABIS.orEmpty().mapNotNull { abi ->
             when (abi) {
                 "arm64-v8a" -> "arm64"
