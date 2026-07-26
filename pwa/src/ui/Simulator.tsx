@@ -321,20 +321,43 @@ function draw(
   ctx.stroke();
   ctx.setLineDash([]);
 
-  // user reach: near bubble + forward cone (soft)
+  // user reach: near bubble + forward cone. The true reach can be kilometres —
+  // drawn uncapped it becomes a screen-crossing band whose apex is unreadable
+  // (it looks like it points backwards). Cap the drawn beam so it visibly
+  // emanates from the car, brightest at the apex, and mark clipped reach with
+  // a dashed arc at the cap.
   const [ux, uy] = px(u.lat, u.lng);
   const reachPx = senderRadiusM(u.speed) / mPerPx;
   const nearPx = NEAR_BUBBLE_M / mPerPx;
   const hd = toRad(u.heading) - Math.PI / 2;
-  const cone = ctx.createRadialGradient(ux, uy, nearPx * 0.4, ux, uy, reachPx);
-  cone.addColorStop(0, "rgba(245,165,36,0.10)");
+  const drawnReach = Math.min(reachPx, Math.min(W, H) * 0.38);
+  const cone = ctx.createRadialGradient(ux, uy, 0, ux, uy, drawnReach);
+  cone.addColorStop(0, "rgba(245,165,36,0.26)");
+  cone.addColorStop(0.35, "rgba(245,165,36,0.10)");
   cone.addColorStop(1, "rgba(245,165,36,0)");
   ctx.beginPath();
   ctx.moveTo(ux, uy);
-  ctx.arc(ux, uy, reachPx, hd - Math.PI / 3, hd + Math.PI / 3);
+  ctx.arc(ux, uy, drawnReach, hd - Math.PI / 3, hd + Math.PI / 3);
   ctx.closePath();
   ctx.fillStyle = cone;
   ctx.fill();
+  if (reachPx > drawnReach) {
+    // reach extends past the drawn beam
+    ctx.beginPath();
+    ctx.arc(ux, uy, drawnReach + 8, hd - Math.PI / 3.4, hd + Math.PI / 3.4);
+    ctx.strokeStyle = "rgba(245,165,36,0.35)";
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([3, 7]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+  // heading needle: short bright axis from the nose so direction is unmistakable
+  ctx.beginPath();
+  ctx.moveTo(ux + 14 * Math.cos(hd), uy + 14 * Math.sin(hd));
+  ctx.lineTo(ux + 52 * Math.cos(hd), uy + 52 * Math.sin(hd));
+  ctx.strokeStyle = "rgba(245,165,36,0.85)";
+  ctx.lineWidth = 2;
+  ctx.stroke();
   ctx.beginPath();
   ctx.arc(ux, uy, nearPx, 0, Math.PI * 2);
   ctx.strokeStyle = "rgba(245,165,36,0.18)";
