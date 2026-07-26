@@ -1,20 +1,28 @@
-/* Car Radio — night instrument cluster.
-   Tokens: asphalt #07090b, panel #10141a, cluster amber #f5a524,
-   receive green #4ade80, record red #f4655f, text #e8ecea, dim #66707a. */
+/* Car Radio — night-drive radio instrument.
+   Palette: layered night blues (not flat black), dashboard amber as identity,
+   green/red reserved for live receive/transmit states.
+   Type: Big Shoulders Display (highway-signage condensed) + Chakra Petch (cluster UI). */
 @import "@fontsource/chakra-petch/latin-400.css";
 @import "@fontsource/chakra-petch/latin-600.css";
+@import "@fontsource/big-shoulders-display/latin-700";
+@import "@fontsource/big-shoulders-display/latin-800";
 
 :root {
-  --asphalt: #07090b;
-  --panel: #10141a;
-  --edge: #1c232c;
+  --night-0: #06090e;
+  --night-1: #0a0f16;
+  --night-2: #0f1520;
+  --panel: #0d131c;
+  --edge: #1b2430;
+  --edge2: #27303d;
   --amber: #f5a524;
+  --amber-soft: #f5a52422;
   --amber-dim: #8a6420;
   --green: #4ade80;
   --red: #f4655f;
-  --text: #e8ecea;
-  --dim: #66707a;
-  --display: "Chakra Petch", system-ui, sans-serif;
+  --text: #ecefe9;
+  --dim: #6d7885;
+  --display: "Big Shoulders Display", "Chakra Petch", system-ui, sans-serif;
+  --ui: "Chakra Petch", system-ui, sans-serif;
   --mono: ui-monospace, "SF Mono", Menlo, monospace;
 }
 
@@ -22,14 +30,16 @@
 
 html, body, #root {
   height: 100%;
-  background: var(--asphalt);
   color: var(--text);
-  font-family: var(--display);
+  font-family: var(--ui);
   overscroll-behavior: none;
+  background:
+    radial-gradient(120% 90% at 50% -10%, #131a28 0%, var(--night-1) 45%, var(--night-0) 100%);
+  background-attachment: fixed;
 }
 
 button {
-  font-family: var(--display);
+  font-family: var(--ui);
   cursor: pointer;
   border: none;
   background: none;
@@ -39,95 +49,201 @@ button {
 /* ---------- shared ---------- */
 .eyebrow {
   font-size: 11px;
-  letter-spacing: 0.32em;
+  letter-spacing: 0.34em;
   text-transform: uppercase;
   color: var(--amber);
 }
-
 .dim { color: var(--dim); }
 
 /* ---------- home ---------- */
 .home {
+  position: relative;
   height: 100%;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.home-inner {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 14px;
-  padding: 24px;
+  gap: 10px;
+  padding: 20px 24px;
   text-align: center;
+  position: relative;
+  z-index: 1;
 }
-.home .wordmark {
-  font-size: clamp(40px, 9vw, 72px);
-  font-weight: 600;
-  letter-spacing: 0.14em;
-  line-height: 1;
+.hero-dial {
+  width: clamp(120px, 22vh, 200px);
+  aspect-ratio: 1;
+  margin-bottom: 2px;
 }
-.home .wordmark span { color: var(--amber); }
-.home .tagline {
+.hero-dial .ring-wrap {
+  width: 100%;
+  animation: heroIn 1.1s cubic-bezier(0.22, 1, 0.36, 1) both;
+  filter: drop-shadow(0 0 34px rgba(245, 165, 36, 0.14));
+}
+.wordmark {
+  font-family: var(--display);
+  font-weight: 800;
+  font-size: clamp(56px, min(12vw, 12vh), 104px);
+  letter-spacing: 0.02em;
+  line-height: 0.9;
+  color: var(--text);
+}
+.wordmark span { color: var(--amber); }
+.tagline {
   color: var(--dim);
   font-size: 15px;
-  margin-bottom: 30px;
-  max-width: 300px;
+  line-height: 1.55;
+  max-width: 330px;
+  margin-bottom: 10px;
 }
+.cta-row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; justify-content: center; }
 .btn-primary {
-  background: var(--amber);
-  color: #14100a;
-  font-size: 17px;
+  background: linear-gradient(180deg, #ffb840, var(--amber));
+  color: #171006;
+  font-size: 16px;
   font-weight: 600;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
-  padding: 18px 46px;
+  padding: 17px 42px;
   border-radius: 999px;
+  box-shadow: 0 6px 26px rgba(245, 165, 36, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+  transition: transform 0.15s ease, box-shadow 0.2s ease;
 }
+.btn-primary:hover { box-shadow: 0 8px 34px rgba(245, 165, 36, 0.42), inset 0 1px 0 rgba(255,255,255,0.35); }
 .btn-primary:active { transform: scale(0.97); }
 .btn-quiet {
   color: var(--dim);
   font-size: 14px;
   letter-spacing: 0.06em;
-  padding: 12px 20px;
-  border: 1px solid var(--edge);
+  padding: 14px 24px;
+  border: 1px solid var(--edge2);
   border-radius: 999px;
+  background: rgba(15, 21, 32, 0.5);
+  transition: color 0.15s ease, border-color 0.15s ease;
 }
 .btn-quiet:hover { color: var(--text); border-color: var(--dim); }
-.home .handle-preview {
-  margin-top: 26px;
-  font-family: var(--mono);
-  font-size: 13px;
-  color: var(--dim);
+
+.trip-plate {
+  margin-top: 12px;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 9px 18px;
+  border: 1px solid var(--edge);
+  border-radius: 10px;
+  background: linear-gradient(180deg, rgba(21, 28, 40, 0.85), rgba(13, 19, 28, 0.85));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
-.home .handle-preview b { color: var(--amber); font-weight: 400; }
-.home .get-apps {
-  margin-top: 18px;
-  font-size: 12px;
-  letter-spacing: 0.04em;
+.plate-label { font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--dim); }
+.plate-handle {
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: 22px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--amber);
 }
-.home .get-apps a { color: var(--text); text-decoration-color: var(--amber-dim); }
-.home .get-apps a:hover { color: var(--amber); }
+
 .convoy-input {
-  margin-top: 10px;
-  background: var(--panel);
+  background: rgba(13, 19, 28, 0.7);
   border: 1px solid var(--edge);
   border-radius: 10px;
   color: var(--text);
   font-family: var(--mono);
-  font-size: 13px;
+  font-size: 12.5px;
   padding: 10px 14px;
   width: min(320px, 80vw);
   text-align: center;
 }
 .convoy-input:focus { outline: none; border-color: var(--amber-dim); }
 .convoy-input::placeholder { color: var(--dim); }
-.report-chip {
-  color: var(--dim);
-  font-size: 11px;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  padding: 8px 14px;
-  border: 1px solid var(--edge);
-  border-radius: 999px;
+
+.get-apps { margin-top: 14px; font-size: 12px; letter-spacing: 0.04em; }
+.get-apps a { color: var(--text); text-decoration-color: var(--amber-dim); }
+.get-apps a:hover { color: var(--amber); }
+
+/* road strip at the bottom of the hero: asphalt + moving center line */
+.road-strip {
+  position: relative;
+  height: 44px;
+  flex: none;
+  background: linear-gradient(180deg, transparent, rgba(20, 26, 36, 0.9) 40%, #10151d);
+  overflow: hidden;
 }
-.report-chip:active { color: var(--red); border-color: var(--red); }
+.road-dashes {
+  position: absolute;
+  left: -10%;
+  right: -10%;
+  top: 60%;
+  height: 3px;
+  background: repeating-linear-gradient(
+    90deg,
+    var(--amber) 0 34px,
+    transparent 34px 88px
+  );
+  opacity: 0.5;
+  animation: roadMove 1.6s linear infinite;
+}
+@keyframes roadMove { to { transform: translateX(-88px); } }
+
+/* entrance choreography */
+.rise { animation: riseIn 0.8s cubic-bezier(0.22, 1, 0.36, 1) both; }
+.r1 { animation-delay: 0.15s; }
+.r2 { animation-delay: 0.24s; }
+.r3 { animation-delay: 0.34s; }
+.r4 { animation-delay: 0.46s; }
+.r5 { animation-delay: 0.58s; }
+.r6 { animation-delay: 0.7s; }
+@keyframes riseIn {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes heroIn {
+  from { opacity: 0; transform: scale(0.9) rotate(-14deg); }
+  to { opacity: 1; transform: none; }
+}
+
+/* ---------- the dial ---------- */
+.ring-wrap {
+  position: relative;
+  width: min(78vw, 52vh);
+  aspect-ratio: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.dial-glow { filter: drop-shadow(0 0 10px currentColor); }
+.ring-idle .dial-glow { color: rgba(245, 165, 36, 0.5); }
+.ring-receiving .dial-glow { color: rgba(74, 222, 128, 0.55); }
+.ring-recording .dial-glow { color: rgba(244, 101, 95, 0.55); }
+
+.dial-sweep { animation: dialSweep 14s linear infinite; }
+.ring-receiving .dial-sweep { animation-duration: 3.2s; }
+.ring-recording .dial-sweep { animation-duration: 5s; }
+.ring-deco .dial-sweep { animation-duration: 22s; }
+@keyframes dialSweep { to { transform: rotate(360deg); } }
+
+.dial-core { animation: corePulse 1.1s ease-in-out infinite; transform-origin: 100px 100px; }
+@keyframes corePulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.14); }
+}
+
+.wave-bar { transform-origin: center 100px; animation: waveBar 0.9s ease-in-out infinite; }
+.wb0 { animation-delay: 0s; }
+.wb1 { animation-delay: 0.18s; }
+.wb2 { animation-delay: 0.36s; }
+@keyframes waveBar {
+  0%, 100% { transform: scaleY(0.45); }
+  50% { transform: scaleY(1.25); }
+}
 
 /* ---------- drive mode ---------- */
 .drive {
@@ -141,35 +257,30 @@ button {
   user-select: none;
   -webkit-user-select: none;
 }
-.drive-top {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
-}
+.drive-top { display: flex; flex-direction: column; align-items: center; gap: 5px; }
 .drive-top .handle {
-  font-family: var(--mono);
-  font-size: 15px;
-  letter-spacing: 0.18em;
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: 30px;
+  letter-spacing: 0.08em;
   color: var(--amber);
+  line-height: 1;
 }
 .drive-hud {
   display: flex;
-  gap: 22px;
+  gap: 10px;
   font-family: var(--mono);
-  font-size: 12px;
+  font-size: 11.5px;
   color: var(--dim);
+}
+.drive-hud span {
+  padding: 4px 10px;
+  border: 1px solid var(--edge);
+  border-radius: 999px;
+  background: rgba(15, 21, 32, 0.55);
 }
 .drive-hud b { color: var(--text); font-weight: 400; }
 
-.ring-wrap {
-  position: relative;
-  width: min(78vw, 52vh);
-  aspect-ratio: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
 .ring-status {
   position: absolute;
   inset: 0;
@@ -181,29 +292,11 @@ button {
   pointer-events: none;
   text-align: center;
 }
-.ring-status .word {
-  font-size: 20px;
-  font-weight: 600;
-  letter-spacing: 0.28em;
-  text-transform: uppercase;
-}
-.ring-status .speaker {
-  font-family: var(--mono);
-  font-size: 13px;
-  color: var(--green);
-  letter-spacing: 0.12em;
-}
-.drive-bottom {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
-  min-height: 54px;
-}
+.drive-bottom { display: flex; flex-direction: column; align-items: center; gap: 7px; min-height: 54px; }
 .drive-hint {
   font-size: 12px;
   color: var(--dim);
-  letter-spacing: 0.14em;
+  letter-spacing: 0.16em;
   text-transform: uppercase;
 }
 .ticker {
@@ -225,19 +318,23 @@ button {
   font-size: 20px;
   padding: 10px;
 }
+.report-chip {
+  color: var(--dim);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  padding: 8px 14px;
+  border: 1px solid var(--edge);
+  border-radius: 999px;
+  background: rgba(15, 21, 32, 0.5);
+}
+.report-chip:active { color: var(--red); border-color: var(--red); }
+.badge-elastic { color: var(--amber); }
+.badge-banned { color: var(--red); }
 
-/* ---------- simulator v2: stage left, phone right, settings overlay ---------- */
-.sim2 {
-  height: 100%;
-  display: flex;
-  overflow: hidden;
-}
-.sim2-stage {
-  position: relative;
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-}
+/* ---------- simulator v2 ---------- */
+.sim2 { height: 100%; display: flex; overflow: hidden; }
+.sim2-stage { position: relative; flex: 1; min-width: 0; overflow: hidden; }
 .sim2-stage canvas { display: block; width: 100%; height: 100%; }
 .stage-title {
   position: absolute;
@@ -245,13 +342,15 @@ button {
   left: 22px;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
   pointer-events: none;
 }
 .stage-road {
-  font-size: 20px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: 30px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
   color: var(--text);
 }
 .stage-caption {
@@ -269,10 +368,10 @@ button {
   color: var(--dim);
   font-size: 13px;
   letter-spacing: 0.08em;
-  padding: 8px 12px;
+  padding: 8px 14px;
   border: 1px solid var(--edge);
   border-radius: 999px;
-  background: rgba(16, 20, 26, 0.6);
+  background: rgba(13, 19, 28, 0.65);
 }
 .stage-exit:hover { color: var(--text); border-color: var(--dim); }
 
@@ -280,7 +379,7 @@ button {
   position: relative;
   width: 430px;
   flex: none;
-  background: var(--panel);
+  background: linear-gradient(180deg, var(--night-2), var(--panel));
   border-left: 1px solid var(--edge);
   display: flex;
   flex-direction: column;
@@ -298,7 +397,7 @@ button {
   font-family: var(--mono);
   font-size: 12px;
   position: relative;
-  z-index: 8; /* stays clickable above the settings overlay */
+  z-index: 8;
 }
 .phone-frame {
   position: relative;
@@ -306,11 +405,15 @@ button {
   flex: 1;
   min-height: 0;
   max-height: 700px;
-  border: 2px solid #232b35;
+  border: 2px solid #29323f;
   border-radius: 34px;
   overflow: hidden;
-  background: var(--asphalt);
-  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55), 0 0 0 6px #0d1116;
+  background:
+    radial-gradient(120% 90% at 50% -10%, #131a28 0%, var(--night-1) 45%, var(--night-0) 100%);
+  box-shadow:
+    0 24px 60px rgba(0, 0, 0, 0.55),
+    0 0 0 6px #0b0f15,
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 .phone-notch {
   position: absolute;
@@ -320,16 +423,18 @@ button {
   width: 84px;
   height: 8px;
   border-radius: 999px;
-  background: #1b222b;
+  background: #202834;
   z-index: 3;
 }
 .drive.embedded { padding-top: 30px; }
 .drive.embedded .ring-wrap { width: min(76%, 42vh); }
+.drive.embedded .handle { font-size: 26px; }
+
 .settings-overlay {
   position: absolute;
   inset: 0;
   z-index: 6;
-  background: var(--panel);
+  background: linear-gradient(180deg, var(--night-2), var(--panel));
   padding: 18px 20px;
   overflow-y: auto;
   display: flex;
@@ -338,13 +443,41 @@ button {
   border-left: 1px solid var(--edge);
 }
 .settings-overlay h2 {
-  font-size: 13px;
-  letter-spacing: 0.28em;
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: 24px;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--amber);
-  font-weight: 600;
-  padding-top: 44px;
+  padding-top: 40px;
 }
+.sim-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--edge);
+}
+.sim-section label {
+  font-size: 11px;
+  color: var(--dim);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+.sim-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.chip {
+  border: 1px solid var(--edge2);
+  border-radius: 999px;
+  padding: 8px 14px;
+  font-size: 13px;
+  color: var(--text);
+  background: rgba(21, 28, 40, 0.7);
+  transition: border-color 0.15s ease;
+}
+.chip:hover { border-color: var(--amber-dim); }
+.chip.warn { color: var(--red); }
+.chip.go { color: var(--green); }
+input[type="range"] { accent-color: var(--amber); width: 100%; }
 .check-row {
   display: flex;
   gap: 8px;
@@ -355,37 +488,6 @@ button {
   letter-spacing: normal;
 }
 .check-row input { accent-color: var(--amber); }
-@media (max-width: 900px) {
-  .sim2 { flex-direction: column; }
-  .sim2-stage { min-height: 40%; }
-  .sim2-right { width: 100%; flex: 1; border-left: none; border-top: 1px solid var(--edge); }
-}
-.sim-section {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding-bottom: 14px;
-  border-bottom: 1px solid var(--edge);
-}
-.sim-section label {
-  font-size: 12px;
-  color: var(--dim);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-.sim-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
-.chip {
-  border: 1px solid var(--edge);
-  border-radius: 8px;
-  padding: 8px 12px;
-  font-size: 13px;
-  color: var(--text);
-  background: #151b22;
-}
-.chip:hover { border-color: var(--amber-dim); }
-.chip.warn { color: var(--red); }
-.chip.go { color: var(--green); }
-input[type="range"] { accent-color: var(--amber); width: 100%; }
 .sim-log {
   font-family: var(--mono);
   font-size: 11px;
@@ -401,11 +503,11 @@ input[type="range"] { accent-color: var(--amber); width: 100%; }
   display: flex;
   justify-content: space-between;
   gap: 8px;
-  font-size: 12px;
+  font-size: 12.5px;
   align-items: center;
   color: var(--text);
 }
-.bot-line .role { color: var(--dim); font-family: var(--mono); font-size: 11px; }
+.bot-line .role { color: var(--dim); font-family: var(--mono); font-size: 10.5px; }
 .sim-status {
   font-family: var(--mono);
   font-size: 12px;
@@ -413,15 +515,13 @@ input[type="range"] { accent-color: var(--amber); width: 100%; }
   line-height: 1.8;
 }
 .sim-status b { color: var(--amber); font-weight: 400; }
-.badge-elastic { color: var(--amber); }
-.badge-banned { color: var(--red); }
 
-/* ---------- ring pulse ---------- */
-@keyframes ringPulse {
-  0% { transform: scale(1); opacity: 0.8; }
-  70% { transform: scale(1.12); opacity: 0.15; }
-  100% { transform: scale(1.16); opacity: 0; }
+@media (max-width: 900px) {
+  .sim2 { flex-direction: column; }
+  .sim2-stage { min-height: 40%; }
+  .sim2-right { width: 100%; flex: 1; border-left: none; border-top: 1px solid var(--edge); }
 }
+
 @media (prefers-reduced-motion: reduce) {
   * { animation: none !important; transition: none !important; }
 }

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { generateHandle } from "../protocol/handles";
+import { Ring } from "./Ring";
 
 export function Home(props: {
   onDrive: (handle: string, convoyCode: string) => void;
@@ -9,53 +10,70 @@ export function Home(props: {
   const [convoyCode, setConvoyCode] = useState("");
   return (
     <div className="home">
-      <div className="eyebrow">same-traffic voice</div>
-      <div className="wordmark">
-        CAR<span>RADIO</span>
+      <div className="home-inner">
+        <div className="hero-dial">
+          <Ring state="idle" peers={3} onTap={() => {}} decorative />
+        </div>
+
+        <div className="eyebrow rise r1">same-traffic voice</div>
+        <h1 className="wordmark rise r2">
+          CAR&nbsp;<span>RADIO</span>
+        </h1>
+        <p className="tagline rise r3">
+          Talk to the cars around you. Eyes up, hands on the wheel — nothing to
+          read, nothing to find.
+        </p>
+
+        <div className="cta-row rise r4">
+          <button className="btn-primary" onClick={() => props.onDrive(handle, convoyCode)}>
+            Start driving
+          </button>
+          <button className="btn-quiet" onClick={() => props.onSimulate(handle, convoyCode)}>
+            Open simulator
+          </button>
+        </div>
+
+        <div className="trip-plate rise r5">
+          <span className="plate-label">this trip you are</span>
+          <span className="plate-handle">{handle}</span>
+        </div>
+
+        <input
+          className="convoy-input rise r5"
+          type="text"
+          placeholder="convoy code (optional — friends only)"
+          value={convoyCode}
+          onChange={(e) => setConvoyCode(e.target.value)}
+          autoCapitalize="none"
+          autoCorrect="off"
+        />
+
+        <div className="get-apps rise r6">
+          <span className="dim">native apps (dev builds): </span>
+          <a
+            href="https://github.com/otrajman/carradio/releases/download/latest-builds/carradio-debug.apk"
+            target="_blank"
+            rel="noreferrer"
+          >
+            Android APK
+          </a>
+          {" · "}
+          <a
+            href="https://github.com/otrajman/carradio/releases/tag/latest-builds"
+            target="_blank"
+            rel="noreferrer"
+          >
+            iOS (sideload)
+          </a>
+          {" · "}
+          <a href="https://github.com/otrajman/carradio" target="_blank" rel="noreferrer">
+            source
+          </a>
+        </div>
       </div>
-      <p className="tagline">
-        Talk to the cars around you. Eyes up, hands on the wheel — nothing to read,
-        nothing to find.
-      </p>
-      <button className="btn-primary" onClick={() => props.onDrive(handle, convoyCode)}>
-        Start driving
-      </button>
-      <button className="btn-quiet" onClick={() => props.onSimulate(handle, convoyCode)}>
-        Open simulator
-      </button>
-      <input
-        className="convoy-input"
-        type="text"
-        placeholder="convoy code (optional — friends only)"
-        value={convoyCode}
-        onChange={(e) => setConvoyCode(e.target.value)}
-        autoCapitalize="none"
-        autoCorrect="off"
-      />
-      <div className="handle-preview">
-        this trip you are <b>{handle}</b>
-      </div>
-      <div className="get-apps">
-        <span className="dim">native apps (dev builds): </span>
-        <a
-          href="https://github.com/otrajman/carradio/releases/download/latest-builds/carradio-debug.apk"
-          target="_blank"
-          rel="noreferrer"
-        >
-          Android APK
-        </a>
-        {" · "}
-        <a
-          href="https://github.com/otrajman/carradio/releases/tag/latest-builds"
-          target="_blank"
-          rel="noreferrer"
-        >
-          iOS (sideload)
-        </a>
-        {" · "}
-        <a href="https://github.com/otrajman/carradio" target="_blank" rel="noreferrer">
-          source
-        </a>
+
+      <div className="road-strip" aria-hidden="true">
+        <div className="road-dashes" />
       </div>
     </div>
   );
