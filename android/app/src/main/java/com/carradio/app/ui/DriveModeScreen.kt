@@ -9,6 +9,14 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.setValue
+import kotlinx.coroutines.delay
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -200,21 +208,51 @@ private fun TopBar(
     ) {
         if (locked) {
             // 8-second deliberate hold to unlock ("I'm a passenger", PROTOCOL §13).
+            // Drift-tolerant: we track press/release ourselves and consume every
+            // pointer event so finger wobble (or the parent swipe detector) can't
+            // cancel an 8-second hold. A countdown shows the hold is registering.
+            var holdingSince by remember { mutableLongStateOf(0L) }
+            var secondsLeft by remember { mutableIntStateOf(0) }
+            LaunchedEffect(holdingSince) {
+                if (holdingSince == 0L) {
+                    secondsLeft = 0
+                    return@LaunchedEffect
+                }
+                while (true) {
+                    val heldMs = System.currentTimeMillis() - holdingSince
+                    val remaining = Constants.PASSENGER_LONG_PRESS_MS - heldMs
+                    if (remaining <= 0) {
+                        onPassengerOverride()
+                        holdingSince = 0L
+                        break
+                    }
+                    secondsLeft = ((remaining + 999) / 1000).toInt()
+                    delay(100)
+                }
+            }
             Text(
-                text = "DRIVE MODE — hold 8 s if you're a passenger",
+                text = if (holdingSince != 0L) {
+                    "Keep holding… $secondsLeft"
+                } else {
+                    "DRIVE MODE — hold 8 s if you're a passenger"
+                },
                 fontSize = 13.sp,
                 color = RadioAmber,
                 modifier = Modifier
                     .weight(1f)
+                    .padding(vertical = 10.dp) // generous hit target
                     .pointerInput(Unit) {
-                        detectTapGestures(
-                            onPress = {
-                                val released = withTimeoutOrNull(
-                                    Constants.PASSENGER_LONG_PRESS_MS
-                                ) { tryAwaitRelease() }
-                                if (released == null) onPassengerOverride()
+                        awaitEachGesture {
+                            awaitFirstDown(requireUnconsumed = false).consume()
+                            holdingSince = System.currentTimeMillis()
+                            var pressed = true
+                            while (pressed) {
+                                val event = awaitPointerEvent(PointerEventPass.Main)
+                                event.changes.forEach { it.consume() }
+                                pressed = event.changes.any { it.pressed }
                             }
-                        )
+                            holdingSince = 0L
+                        }
                     }
             )
         } else {
