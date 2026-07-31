@@ -59,6 +59,16 @@ Unit tests (`npm test`): filter math, cone asymmetry, room sets — 10 passing.
 
 - Anon key can insert trips/messages/mutes but cannot read tables directly (RPCs only),
   cannot update/delete anything, and cannot forge `kind=system` messages (RLS-verified).
+- Insert policies enforce real invariants (advisor pass 2, migration 0005): handle must
+  match the "Adjective Animal" shape, no self-mutes, no self-reports. `shadowbans` has an
+  explicit deny-all client policy; `rls_auto_enable` is off the RPC surface.
+- `spatial_ref_sys` (PostGIS, extension-owned by `supabase_admin`): RLS can't be enabled
+  and its anon grants can't be revoked from the `postgres` role, so writes are blocked by
+  a statement trigger instead (migrations 0006–0007; reads stay open — public reference
+  data). The advisor ERROR for it and the `st_estimatedextent`/postgis-in-public WARNs
+  are platform artifacts, fixable only by recreating PostGIS in the `extensions` schema.
+- `get_breadcrumbs` / `is_shadowbanned` advisor WARNs are intentional: they are the
+  anon read API (SECURITY DEFINER with capped inputs and pinned search_path).
 - Known gaps, accepted for v1 demo: no rate limiting per client, sender-enforced
   shadowban (spoofable client), public bucket listing by guessable UUID paths only.
   Hardening path: Supabase anonymous auth + per-trip ownership claims + signed URLs.
