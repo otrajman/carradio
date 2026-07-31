@@ -62,11 +62,11 @@ Unit tests (`npm test`): filter math, cone asymmetry, room sets — 10 passing.
 - Insert policies enforce real invariants (advisor pass 2, migration 0005): handle must
   match the "Adjective Animal" shape, no self-mutes, no self-reports. `shadowbans` has an
   explicit deny-all client policy; `rls_auto_enable` is off the RPC surface.
-- `spatial_ref_sys` (PostGIS, extension-owned by `supabase_admin`): RLS can't be enabled
-  and its anon grants can't be revoked from the `postgres` role, so writes are blocked by
-  a statement trigger instead (migrations 0006–0007; reads stay open — public reference
-  data). The advisor ERROR for it and the `st_estimatedextent`/postgis-in-public WARNs
-  are platform artifacts, fixable only by recreating PostGIS in the `extensions` schema.
+- PostGIS lives in the `extensions` schema (migration 0008 relocated it out of `public`
+  via drop/recreate, preserving `messages.location` as WKT across the move). This cleared
+  the `spatial_ref_sys` RLS advisor ERROR and the postgis-in-public WARNs at the root;
+  the interim trigger guard from migrations 0006–0007 is retired because anon holds no
+  write grants on the relocated `spatial_ref_sys`.
 - `get_breadcrumbs` / `is_shadowbanned` advisor WARNs are intentional: they are the
   anon read API (SECURITY DEFINER with capped inputs and pinned search_path).
 - Known gaps, accepted for v1 demo: no rate limiting per client, sender-enforced
