@@ -127,51 +127,77 @@ struct VoxDial: View {
     let level: Float
     let playing: Bool
 
-    var body: some View {
-        TimelineView(.animation(minimumInterval: 1 / 30, paused: !(playing || mic == .yielding))) { context in
-            Canvas { ctx, size in
-                let center = CGPoint(x: size.width / 2, y: size.height / 2)
-                let outer = min(size.width, size.height) / 2
-                let inner = outer * 0.80
-                let ticks = 60
-                let receiving = playing || mic == .yielding
-                let head = Int(context.date.timeIntervalSinceReferenceDate / 1.4 * Double(ticks)) % ticks
-                let lit = Int(level * Float(ticks))
-                let active: Color = receiving ? PelotonPalette.pack
-                    : mic == .onAir ? PelotonPalette.signal
-                    : mic == .listening ? PelotonPalette.ink : PelotonPalette.muted
+    private static let ticks = 60
+    private static let sweepLength = 14
 
-                if mic == .onAir {
-                    let r = inner * 0.86
-                    ctx.fill(
-                        Path(ellipseIn: CGRect(x: center.x - r, y: center.y - r, width: 2 * r, height: 2 * r)),
-                        with: .color(PelotonPalette.signal.opacity(0.12 + 0.25 * Double(level)))
-                    )
-                }
-                for i in 0..<ticks {
-                    let angle = Double(i) / Double(ticks) * 2 * .pi - .pi / 2
-                    let on: Bool
-                    if receiving {
-                        on = (head - i + ticks) % ticks < 14
-                    } else if mic == .paused || mic == .off {
-                        on = false
-                    } else {
-                        on = i < lit
-                    }
-                    let major = i % 5 == 0
-                    let r0 = major ? inner * 0.94 : inner
-                    var p = Path()
-                    p.move(to: CGPoint(x: center.x + cos(angle) * r0, y: center.y + sin(angle) * r0))
-                    p.addLine(to: CGPoint(x: center.x + cos(angle) * outer, y: center.y + sin(angle) * outer))
-                    ctx.stroke(
-                        p,
-                        with: .color(on ? active : PelotonPalette.line),
-                        style: StrokeStyle(lineWidth: major ? outer * 0.035 : outer * 0.022, lineCap: .round)
-                    )
-                }
+    private var receiving: Bool { playing || mic == .yielding }
+
+    private var activeColor: Color {
+        if receiving { return PelotonPalette.pack }
+        switch mic {
+        case .onAir: return PelotonPalette.signal
+        case .listening: return PelotonPalette.ink
+        default: return PelotonPalette.muted
+        }
+    }
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: !receiving)) { context in
+            Canvas { ctx, size in
+                draw(in: &ctx, size: size, time: context.date.timeIntervalSinceReferenceDate)
             }
         }
         .aspectRatio(1, contentMode: .fit)
         .animation(.linear(duration: 0.09), value: level)
+    }
+
+    // Explicit CGFloat everywhere: mixing Double/CGFloat in long expressions made the
+    // type checker time out in CI.
+
+    private func draw(in ctx: inout GraphicsContext, size: CGSize, time: TimeInterval) {
+        let center = CGPoint(x: size.width / 2, y: size.height / 2)
+        let outer: CGFloat = min(size.width, size.height) / 2
+        let inner: CGFloat = outer * 0.80
+        if mic == .onAir { drawGlow(in: &ctx, center: center, radius: inner * 0.86) }
+        let head = sweepHead(time: time)
+        let lit = Int(level * Float(Self.ticks))
+        for i in 0..<Self.ticks {
+            let on = isTickLit(i, head: head, lit: lit)
+            drawTick(i, in: &ctx, center: center, inner: inner, outer: outer,
+                     color: on ? activeColor : PelotonPalette.line)
+        }
+    }
+
+    private func sweepHead(time: TimeInterval) -> Int {
+        let turns: Double = time / 1.4
+        return Int(turns * Double(Self.ticks)) % Self.ticks
+    }
+
+    private func isTickLit(_ i: Int, head: Int, lit: Int) -> Bool {
+        if receiving { return (head - i + Self.ticks) % Self.ticks < Self.sweepLength }
+        if mic == .paused || mic == .off { return false }
+        return i < lit
+    }
+
+    private func drawGlow(in ctx: inout GraphicsContext, center: CGPoint, radius r: CGFloat) {
+        let rect = CGRect(x: center.x - r, y: center.y - r, width: 2 * r, height: 2 * r)
+        let alpha: Double = 0.12 + 0.25 * Double(level)
+        ctx.fill(Path(ellipseIn: rect), with: .color(PelotonPalette.signal.opacity(alpha)))
+    }
+
+    private func drawTick(
+        _ i: Int, in ctx: inout GraphicsContext,
+        center: CGPoint, inner: CGFloat, outer: CGFloat, color: Color
+    ) {
+        let angle: CGFloat = CGFloat(i) / CGFloat(Self.ticks) * 2 * .pi - .pi / 2
+        let dx: CGFloat = cos(angle)
+        let dy: CGFloat = sin(angle)
+        let major = i % 5 == 0
+        let r0: CGFloat = major ? inner * 0.94 : inner
+        let width: CGFloat = major ? outer * 0.035 : outer * 0.022
+        var p = Path()
+        p.move(to: CGPoint(x: center.x + dx * r0, y: center.y + dy * r0))
+        p.addLine(to: CGPoint(x: center.x + dx * outer, y: center.y + dy * outer))
+        ctx.stroke(p, with: .color(color), style: StrokeStyle(lineWidth: width, lineCap: .round))
     }
 }
