@@ -12,6 +12,27 @@ export const SYNTHETIC_NODES =
 
 export const BUCKET = "voice_bursts";
 
+/** PROTOCOL §17 gated Gemini Road Guide. Build-time kill switch + per-browser toggle. */
+export const ROAD_GUIDE = (import.meta.env.VITE_ROAD_GUIDE ?? "true") === "true";
+const ROAD_GUIDE_KEY = "road_guide_enabled";
+
+export function roadGuideEnabled(): boolean {
+  if (!ROAD_GUIDE) return false;
+  try {
+    return localStorage.getItem(ROAD_GUIDE_KEY) !== "false";
+  } catch {
+    return true;
+  }
+}
+
+export function setRoadGuideEnabled(on: boolean) {
+  try {
+    localStorage.setItem(ROAD_GUIDE_KEY, String(on));
+  } catch {
+    // storage blocked (private mode): the toggle just won't persist
+  }
+}
+
 export function publicAudioUrl(audioPath: string): string {
   return `${SUPABASE_URL}/storage/v1/object/public/${audioPath}`;
 }

@@ -11,6 +11,8 @@ import MediaPlayer
 final class NowPlayingService {
     var onPlayPause: (() -> Void)?
     var onNextTrack: (() -> Void)?
+    /// Lock-screen / headset title.
+    var title = "Car Radio — live"
 
     private let commandCenter = MPRemoteCommandCenter.shared()
     private let infoCenter = MPNowPlayingInfoCenter.default()
@@ -45,7 +47,7 @@ final class NowPlayingService {
 
     func updateNowPlaying(subtitle: String?) {
         var info: [String: Any] = [
-            MPMediaItemPropertyTitle: "Car Radio — live",
+            MPMediaItemPropertyTitle: title,
             MPNowPlayingInfoPropertyIsLiveStream: true,
             MPNowPlayingInfoPropertyPlaybackRate: 1.0,
         ]

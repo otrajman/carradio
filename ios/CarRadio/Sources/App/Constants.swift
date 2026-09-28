@@ -16,6 +16,14 @@ enum Constants {
     /// Edge function for synthetic nodes (POST { lat, lng }).
     static let syntheticNodesFunction = "synthetic-nodes"
 
+    /// Gated Gemini Road Guide (PROTOCOL §17).
+    static let roadGuideFunction = "road-guide"
+    /// UserDefaults key for the rider/driver's Road Guide on/off switch (default on).
+    static let roadGuideDefaultsKey = "road_guide_enabled"
+    static var roadGuideEnabled: Bool {
+        UserDefaults.standard.object(forKey: roadGuideDefaultsKey) as? Bool ?? true
+    }
+
     /// Full public URL for a bucket-prefixed audio_path
     /// (e.g. "voice_bursts/<trip>/<msg>.m4a") per PROTOCOL §3.
     static func publicAudioURL(for audioPath: String) -> URL? {

@@ -1,7 +1,10 @@
 // Synthetic nodes: turn keyless public APIs (NWS alerts, Wikipedia geosearch) into
-// conversational "System" breadcrumbs near the caller. Clients TTS the returned text.
+// conversational "System" breadcrumbs near the caller. Each script is voiced once with
+// Gemini TTS and stored in the synthetic_voice bucket (audio_path); clients play that and
+// fall back to on-device TTS of `text` when there is no audio (no key, TTS failure).
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { latLngToCell } from "npm:h3-js@4";
+import { synthesizeSpeech, VOICES } from "../_shared/gemini.ts";
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
@@ -17,6 +20,18 @@ const supabase = createClient(
 const SYSTEM_HANDLE = "Radio Tower";
 const DEDUPE_RADIUS_M = 3000;
 const DEDUPE_HOURS = 6;
+const TOWER_STYLE = "calm, warm late-night radio announcer; clear and unhurried";
+
+/** Voices one script; returns the bucket-prefixed audio_path or null (text-only fallback). */
+async function voiceScript(text: string): Promise<string | null> {
+  const wav = await synthesizeSpeech(text, VOICES.tower, TOWER_STYLE);
+  if (!wav) return null;
+  const name = `nodes/${crypto.randomUUID()}.wav`;
+  const { error } = await supabase.storage
+    .from("synthetic_voice")
+    .upload(name, wav, { contentType: "audio/wav" });
+  return error ? null : `synthetic_voice/${name}`;
+}
 
 async function getSystemTripId(): Promise<string> {
   const { data } = await supabase
@@ -116,10 +131,12 @@ Deno.serve(async (req) => {
 
     const tripId = await getSystemTripId();
     const h3r9 = latLngToCell(lat, lng, 9);
-    const rows = scripts.map((text) => ({
+    const audioPaths = await Promise.all(scripts.map(voiceScript));
+    const rows = scripts.map((text, i) => ({
       trip_id: tripId,
       kind: "system",
       text,
+      audio_path: audioPaths[i],
       h3_r9: h3r9,
       location: `SRID=4326;POINT(${lng} ${lat})`,
       heading: 0,
@@ -128,13 +145,12 @@ Deno.serve(async (req) => {
     const { data: inserted, error } = await supabase
       .from("messages")
       .insert(rows)
-      .select("id, trip_id, kind, text, heading, speed, created_at");
+      .select("id, trip_id, kind, text, audio_path, heading, speed, created_at");
     if (error) throw error;
 
     const messages = (inserted ?? []).map((m: any) => ({
       ...m,
       handle: SYSTEM_HANDLE,
-      audio_path: null,
       lat,
       lng,
     }));

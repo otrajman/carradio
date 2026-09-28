@@ -30,14 +30,14 @@ jobs:
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           VERSION_CODE: ${{ github.run_number }}
           VERSION_NAME: 0.1.${{ github.run_number }}
-        run: gradle --no-daemon bundleRelease
+        run: gradle --no-daemon bundleCarradioRelease
       - uses: actions/upload-artifact@v4
-        with: { name: carradio-release-aab, path: android/app/build/outputs/bundle/release/app-release.aab }
+        with: { name: carradio-release-aab, path: android/app/build/outputs/bundle/carradioRelease/app-carradio-release.aab }
       - name: Attach AAB to latest-builds
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          cp app/build/outputs/bundle/release/app-release.aab carradio-release.aab
+          cp app/build/outputs/bundle/carradioRelease/app-carradio-release.aab carradio-release.aab
           gh release upload latest-builds carradio-release.aab --clobber || true
       - name: Upload to Play internal track
         # No-op until the PLAY_SERVICE_ACCOUNT_JSON secret is added (see README).
@@ -46,7 +46,7 @@ jobs:
         with:
           serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
           packageName: com.carradio.app
-          releaseFiles: android/app/build/outputs/bundle/release/app-release.aab
+          releaseFiles: android/app/build/outputs/bundle/carradioRelease/app-carradio-release.aab
           track: internal
           status: completed
     env:

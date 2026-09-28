@@ -44,6 +44,7 @@ fun SettingsScreen(onBack: () -> Unit) {
 
     val wakeWord by settings.wakeWordEnabled.collectAsStateWithLifecycle(initialValue = true)
     val synthetic by settings.syntheticNodesEnabled.collectAsStateWithLifecycle(initialValue = true)
+    val roadGuide by settings.roadGuideEnabled.collectAsStateWithLifecycle(initialValue = true)
     val fakeGps by settings.fakeGpsEnabled.collectAsStateWithLifecycle(initialValue = false)
     val convoyCode by settings.convoyCode.collectAsStateWithLifecycle(initialValue = "")
     val handle by RadioState.handle.collectAsStateWithLifecycle()
@@ -85,6 +86,13 @@ fun SettingsScreen(onBack: () -> Unit) {
                     "(triple-chime, clearly non-human).",
                 checked = synthetic,
                 onChange = { scope.launch { settings.setSyntheticNodesEnabled(it) } }
+            )
+            SettingToggle(
+                title = "Road Guide (AI)",
+                subtitle = "Ask about the road, the scenery, or places nearby and an AI " +
+                    "guide answers just you. It ignores everything else you say.",
+                checked = roadGuide,
+                onChange = { scope.launch { settings.setRoadGuideEnabled(it) } }
             )
             SettingToggle(
                 title = "Fake GPS demo route",

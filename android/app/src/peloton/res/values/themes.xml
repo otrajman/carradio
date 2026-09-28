@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Daylight-first (riders are outdoors); values-night swaps to asphalt. Compose draws
+         everything; this only sets the window so there is no flash on launch. -->
+    <style name="Theme.Peloton" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/peloton_background</item>
+        <item name="android:statusBarColor">@color/peloton_background</item>
+        <item name="android:navigationBarColor">@color/peloton_background</item>
+        <item name="android:windowLightStatusBar">true</item>
+    </style>
+    <color name="peloton_background">#F3F0E8</color>
+</resources>

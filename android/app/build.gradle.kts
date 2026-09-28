@@ -9,12 +9,26 @@ android {
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.carradio.app"
         minSdk = 29
         targetSdk = 35
         // CI passes the run number so every Play upload has a fresh versionCode.
         versionCode = (System.getenv("VERSION_CODE") ?: "1").toInt()
         versionName = System.getenv("VERSION_NAME") ?: "0.1.0"
+    }
+
+    // Two apps from one codebase: Car Radio (phone + Android Auto) and PelotonCB (phone
+    // only, voice-activated group radio for cyclists, PROTOCOL §16). Shared protocol core,
+    // audio, and Supabase I/O live in src/main; each flavor owns its service + UI.
+    flavorDimensions += "app"
+    productFlavors {
+        create("carradio") {
+            dimension = "app"
+            applicationId = "com.carradio.app"
+        }
+        create("peloton") {
+            dimension = "app"
+            applicationId = "com.pelotoncb.app"
+        }
     }
 
     // Play upload signing. Keystore path/passwords come from env (CI secrets) or
@@ -100,7 +114,7 @@ dependencies {
     implementation(libs.media3.exoplayer)
     implementation(libs.media3.session)
 
-    implementation(libs.car.app)
+    "carradioImplementation"(libs.car.app)
 
     implementation(libs.play.services.location)
 

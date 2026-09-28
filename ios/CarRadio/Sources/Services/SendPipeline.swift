@@ -22,27 +22,30 @@ final class SendPipeline {
     }
 
     /// Sends a recorded burst. Never throws — failures are logged and the
-    /// caller's UX proceeds. Returns true if the burst actually went out
-    /// (false = shadowbanned pretend-send or error).
+    /// caller's UX proceeds. Returns the payload that actually went out, or nil
+    /// (shadowbanned pretend-send or error).
     @discardableResult
     func sendBurst(
         fileURL: URL,
         tripID: UUID,
         handle: String,
         state: GpsState,
-        convoyTag: String? = nil
-    ) async -> Bool {
+        convoyTag: String? = nil,
+        publishRooms overrideRooms: [String]? = nil,
+        playSentCue: Bool = true
+    ) async -> BurstPayload? {
         // 1. Shadowban check FIRST. On RPC failure, assume not banned.
         if await isShadowbanned(tripID: tripID) {
             // Pretend to send: play the sent earcon, skip steps 2-4 (§4.1, §8).
+            guard playSentCue else { return nil }
             AudioSessionController.shared.beginPlayback()
             await earcons.play(.sent)
             AudioSessionController.shared.end()
-            return false
+            return nil
         }
 
         guard let h3r9 = RoomManager.res9Cell(lat: state.lat, lng: state.lng) else {
-            return false
+            return nil
         }
         let messageID = UUID()
         let bucketPath = "\(tripID.uuidString.lowercased())/\(messageID.uuidString.lowercased()).m4a"
@@ -85,19 +88,21 @@ final class SendPipeline {
                 createdAt: WireDate.string(from: Date()),
                 convoy: convoyTag
             )
-            let rooms = RoomManager.publishRooms(
+            // PelotonCB passes its pack/geo channel; Car Radio uses the §3 forward fan-out.
+            let rooms = overrideRooms ?? RoomManager.publishRooms(
                 lat: state.lat, lng: state.lng,
                 heading: state.heading, speed: state.speed
             )
             await realtime.broadcast(payload, to: rooms)
 
+            guard playSentCue else { return payload }
             AudioSessionController.shared.beginPlayback()
             await earcons.play(.sent)
             AudioSessionController.shared.end()
-            return true
+            return payload
         } catch {
             NSLog("CarRadio send failed: \(error)")
-            return false
+            return nil
         }
     }
 

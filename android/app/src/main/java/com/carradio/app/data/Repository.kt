@@ -19,13 +19,18 @@ import io.ktor.http.HttpHeaders
 import io.ktor.http.contentType
 import io.ktor.http.isSuccess
 import kotlinx.coroutines.Dispatchers
+import java.time.Instant
+import java.util.UUID
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.put
 
 /**
  * All Supabase I/O (PostgREST inserts, RPCs, Storage upload, edge function calls).
@@ -65,10 +70,18 @@ class Repository(
         banned
     }
 
-    /** PROTOCOL §4.2 — upload the opus burst. Returns the payload audio_path (with bucket prefix). */
-    suspend fun uploadBurst(tripId: String, messageId: String, bytes: ByteArray): String =
+    /**
+     * PROTOCOL §4.2 — upload the burst (Car Radio: opus `.ogg`; PelotonCB: AAC `.m4a`).
+     * Returns the payload audio_path (with bucket prefix).
+     */
+    suspend fun uploadBurst(
+        tripId: String,
+        messageId: String,
+        bytes: ByteArray,
+        extension: String = "ogg"
+    ): String =
         withContext(Dispatchers.IO) {
-            val path = "$tripId/$messageId.ogg"
+            val path = "$tripId/$messageId.$extension"
             client.storage.from(Constants.STORAGE_BUCKET).upload(path, bytes, upsert = false)
             "${Constants.STORAGE_BUCKET}/$path"
         }
@@ -138,31 +151,83 @@ class Repository(
         }
     }
 
+    /** A server-generated system message: always has text; audio when Gemini voiced it. */
+    data class SystemScript(val id: String?, val text: String, val audioPath: String?) {
+        /** Local-only system burst for the play queue (never broadcast). */
+        fun toPayload(lat: Double, lng: Double, handle: String, tripId: String): BurstPayload =
+            BurstPayload(
+                messageId = id ?: UUID.randomUUID().toString(),
+                tripId = tripId,
+                handle = handle,
+                kind = BurstPayload.KIND_SYSTEM,
+                audioPath = audioPath,
+                text = text,
+                lat = lat,
+                lng = lng,
+                createdAt = Instant.now().toString()
+            )
+    }
+
     /**
-     * PROTOCOL §12 — synthetic-nodes edge function. Returns TTS scripts. The response shape is
-     * parsed defensively: either a JSON array of objects with a "text" field, or an object
-     * wrapping such an array under "messages"/"scripts".
+     * PROTOCOL §12 — synthetic-nodes edge function. Returns scripts with an optional
+     * server-rendered voice (`audio_path` in the synthetic_voice bucket). The response shape
+     * is parsed defensively: either a JSON array of objects with a "text" field, or an
+     * object wrapping such an array under "messages"/"scripts".
      */
-    suspend fun fetchSyntheticScripts(lat: Double, lng: Double): List<String> =
+    suspend fun fetchSyntheticScripts(lat: Double, lng: Double): List<SystemScript> =
         withContext(Dispatchers.IO) {
             try {
-                val response = http.post(
-                    "${Constants.SUPABASE_URL}/functions/v1/${Constants.SYNTHETIC_NODES_FN}"
-                ) {
-                    header("apikey", Constants.SUPABASE_ANON_KEY)
-                    header(HttpHeaders.Authorization, "Bearer ${Constants.SUPABASE_ANON_KEY}")
-                    contentType(ContentType.Application.Json)
-                    setBody("""{"lat":$lat,"lng":$lng}""")
-                }
-                if (!response.status.isSuccess()) return@withContext emptyList()
-                parseSyntheticResponse(response.bodyAsText())
+                val body = postFunction(Constants.SYNTHETIC_NODES_FN, """{"lat":$lat,"lng":$lng}""")
+                    ?: return@withContext emptyList()
+                parseSyntheticResponse(body)
             } catch (e: Exception) {
                 Log.w(TAG, "synthetic-nodes call failed", e)
                 emptyList()
             }
         }
 
-    private fun parseSyntheticResponse(body: String): List<String> {
+    /**
+     * PROTOCOL §17 — ask the Road Guide about a burst this trip just sent. The server
+     * transcribes it, runs the verification gate, and answers only route / scenery / POI
+     * talk. Returns null (stay silent) for anything else, on any error, or when disabled.
+     */
+    suspend fun askRoadGuide(payload: BurstPayload): SystemScript? = withContext(Dispatchers.IO) {
+        try {
+            val request = buildJsonObject {
+                put("trip_id", payload.tripId)
+                put("message_id", payload.messageId)
+                put("lat", payload.lat)
+                put("lng", payload.lng)
+                put("heading", payload.heading)
+                put("speed", payload.speed)
+            }
+            val body = postFunction(Constants.ROAD_GUIDE_FN, request.toString())
+                ?: return@withContext null
+            val root = Json.parseToJsonElement(body) as? JsonObject ?: return@withContext null
+            if (root["respond"]?.jsonPrimitive?.content != "true") return@withContext null
+            val text = root["text"]?.jsonPrimitive?.contentOrNull ?: return@withContext null
+            SystemScript(
+                id = root["id"]?.jsonPrimitive?.contentOrNull,
+                text = text,
+                audioPath = root["audio_path"]?.jsonPrimitive?.contentOrNull
+            )
+        } catch (e: Exception) {
+            Log.w(TAG, "road-guide call failed", e)
+            null
+        }
+    }
+
+    private suspend fun postFunction(name: String, json: String): String? {
+        val response = http.post("${Constants.SUPABASE_URL}/functions/v1/$name") {
+            header("apikey", Constants.SUPABASE_ANON_KEY)
+            header(HttpHeaders.Authorization, "Bearer ${Constants.SUPABASE_ANON_KEY}")
+            contentType(ContentType.Application.Json)
+            setBody(json)
+        }
+        return if (response.status.isSuccess()) response.bodyAsText() else null
+    }
+
+    private fun parseSyntheticResponse(body: String): List<SystemScript> {
         return try {
             val root = Json.parseToJsonElement(body)
             val array: JsonArray = when {
@@ -173,11 +238,16 @@ class Repository(
             }
             array.mapNotNull { el ->
                 when {
-                    el is JsonObject && el["text"] != null -> el["text"]!!.jsonPrimitive.content
-                    el !is JsonObject && el !is JsonArray -> el.jsonPrimitive.content
+                    el is JsonObject && el["text"] != null -> SystemScript(
+                        id = el["id"]?.jsonPrimitive?.contentOrNull,
+                        text = el["text"]!!.jsonPrimitive.content,
+                        audioPath = el["audio_path"]?.jsonPrimitive?.contentOrNull
+                    )
+                    el !is JsonObject && el !is JsonArray ->
+                        SystemScript(null, el.jsonPrimitive.content, null)
                     else -> null
                 }
-            }.filter { it.isNotBlank() }
+            }.filter { it.text.isNotBlank() }
         } catch (_: Exception) {
             emptyList()
         }

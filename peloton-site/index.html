@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PelotonCB — hands-free radio for your group ride</title>
+  <meta name="description" content="Join your pack with a code and just talk. PelotonCB turns every phone in the group into a voice-activated radio. No accounts, voice deleted in 24 hours.">
+  <meta name="theme-color" content="#F3F0E8" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#0E0F11" media="(prefers-color-scheme: dark)">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 108 108'%3E%3Ccircle cx='54' cy='54' r='54' fill='%23111214'/%3E%3Ccircle cx='54' cy='62' r='18' fill='none' stroke='%23FF4F1F' stroke-width='6'/%3E%3Ccircle cx='54' cy='62' r='5' fill='%23FF4F1F'/%3E%3Cpath d='M40 34a20 20 0 0 1 28 0M31 26a32 32 0 0 1 46 0' fill='none' stroke='%23F3F0E8' stroke-width='4' stroke-linecap='round'/%3E%3C/svg%3E">
+  <style>
+    :root {
+      --bg: #F3F0E8; --surface: #FFFFFF; --ink: #111214; --muted: #66656B;
+      --line: #D8D2C4; --signal: #FF4F1F; --on-signal: #111214; --pack: #0B8F63;
+      --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root:not([data-theme="light"]) {
+        --bg: #0E0F11; --surface: #1A1B1F; --ink: #F2F0EA; --muted: #8E8D94;
+        --line: #2C2D33; --signal: #FF6A3D; --pack: #34D399;
+      }
+    }
+    :root[data-theme="dark"] {
+      --bg: #0E0F11; --surface: #1A1B1F; --ink: #F2F0EA; --muted: #8E8D94;
+      --line: #2C2D33; --signal: #FF6A3D; --pack: #34D399;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: var(--bg); color: var(--ink); font-family: var(--sans); line-height: 1.5; }
+    .wrap { max-width: 1040px; margin: 0 auto; padding: 0 16px; }
+    a { color: inherit; }
+
+    header { padding: 20px 0; }
+    .mark { display: inline-flex; align-items: center; gap: 8px; text-decoration: none; }
+    .mark b { font-size: 26px; font-weight: 900; letter-spacing: -0.5px; }
+    .mark i { font-style: normal; font-weight: 900; font-size: 18px; background: var(--signal);
+      color: var(--on-signal); border-radius: 6px; padding: 0 7px; }
+
+    .hero { display: grid; grid-template-columns: 1.1fr 0.9fr; gap: 40px; align-items: center;
+      padding: 32px 0 56px; }
+    .eyebrow { font-size: 12px; font-weight: 700; letter-spacing: 0.22em; text-transform: uppercase;
+      color: var(--muted); }
+    h1 { font-size: clamp(40px, 7vw, 76px); line-height: 0.95; font-weight: 900; letter-spacing: -0.03em;
+      margin: 12px 0 18px; }
+    h1 em { font-style: normal; color: var(--signal); }
+    .lede { font-size: 19px; color: var(--muted); max-width: 30em; }
+    .ctas { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 28px; }
+    .btn { display: inline-flex; align-items: center; justify-content: center; min-height: 58px;
+      padding: 0 24px; border-radius: 14px; font-weight: 900; letter-spacing: 0.04em; text-decoration: none;
+      font-size: 16px; }
+    .btn-primary { background: var(--signal); color: var(--on-signal); }
+    .btn-ghost { border: 2px solid var(--ink); color: var(--ink); }
+    .btn-ghost[aria-disabled="true"] { border-color: var(--line); color: var(--muted); cursor: default; }
+    .fine { margin-top: 12px; font-size: 13px; color: var(--muted); }
+
+    .phone { justify-self: center; width: min(320px, 82vw); aspect-ratio: 9 / 18.5; border-radius: 40px;
+      background: var(--surface); border: 2px solid var(--line); padding: 22px 18px;
+      display: flex; flex-direction: column; box-shadow: 0 30px 60px -30px rgba(0,0,0,0.35); }
+    .ph-top { display: flex; justify-content: space-between; align-items: flex-end; }
+    .ph-code { font-family: var(--mono); font-weight: 900; font-size: 19px; }
+    .ph-count { text-align: right; font-weight: 900; font-size: 32px; line-height: 1; color: var(--pack); }
+    .ph-count small { display: block; font-size: 10px; letter-spacing: 0.2em; color: var(--muted); }
+    .dial { position: relative; flex: 1; display: grid; place-items: center; }
+    .dial svg { width: 100%; height: auto; }
+    .dial-label { position: absolute; text-align: center; }
+    .dial-label b { display: block; font-size: 24px; font-weight: 900; color: var(--signal); letter-spacing: 0.04em; }
+    .dial-label span { font-size: 13px; color: var(--muted); font-weight: 600; }
+    .ph-btn { background: var(--ink); color: var(--bg); border-radius: 14px; text-align: center;
+      font-weight: 900; font-size: 20px; padding: 22px 0; letter-spacing: 0.04em; }
+
+    .how { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; padding-bottom: 56px; }
+    .card { background: var(--surface); border: 2px solid var(--line); border-radius: 18px; padding: 20px; }
+    .card .n { font-family: var(--mono); font-weight: 900; color: var(--signal); font-size: 14px; }
+    .card h3 { font-size: 20px; font-weight: 900; margin: 6px 0; letter-spacing: -0.01em; }
+    .card p { color: var(--muted); font-size: 15px; }
+    .card code { font-family: var(--mono); font-weight: 900; color: var(--ink); white-space: nowrap; }
+
+    .band { background: var(--ink); color: var(--bg); border-radius: 22px; padding: 32px 28px;
+      display: grid; grid-template-columns: 1fr 1fr; gap: 28px; margin-bottom: 56px; }
+    .band h2 { font-size: 30px; font-weight: 900; line-height: 1.05; letter-spacing: -0.02em; }
+    .band p { opacity: 0.78; }
+    .band ul { list-style: none; display: grid; gap: 10px; }
+    .band li { padding-left: 22px; position: relative; opacity: 0.9; }
+    .band li::before { content: ""; position: absolute; left: 0; top: 0.55em; width: 10px; height: 10px;
+      border-radius: 50%; background: var(--signal); }
+
+    footer { border-top: 2px solid var(--line); padding: 22px 0 40px; font-size: 13px; color: var(--muted);
+      display: flex; flex-wrap: wrap; gap: 16px; justify-content: space-between; }
+
+    @media (max-width: 860px) {
+      .hero { grid-template-columns: 1fr; padding-top: 12px; }
+      .how { grid-template-columns: 1fr 1fr; }
+      .band { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 520px) { .how { grid-template-columns: 1fr; } .btn { width: 100%; } }
+    @media (prefers-reduced-motion: no-preference) {
+      .tick.on { animation: pulse 1.6s ease-in-out infinite; }
+      @keyframes pulse { 50% { opacity: 0.55; } }
+    }
+  </style>
+</head>
+<body>
+  <header class="wrap">
+    <a class="mark" href="/"><b>PELOTON</b><i>CB</i></a>
+  </header>
+
+  <main class="wrap">
+    <section class="hero">
+      <div>
+        <div class="eyebrow">Group ride radio · Android &amp; iPhone</div>
+        <h1>Just talk.<br>The <em>pack</em> hears you.</h1>
+        <p class="lede">PelotonCB turns every phone in the group into a hands-free radio. Join with a
+          code, put it on the bars or in your jersey, and ride. When you speak, it transmits. When you
+          stop, it listens.</p>
+        <div class="ctas">
+          <a class="btn btn-primary" href="https://github.com/otrajman/carradio/releases/download/latest-builds/pelotoncb-debug.apk">GET THE ANDROID APP</a>
+          <a class="btn btn-ghost" aria-disabled="true">iPHONE — COMING SOON</a>
+        </div>
+        <p class="fine">Android: early-access build (install the APK directly). iPhone: TestFlight soon.</p>
+      </div>
+
+      <div class="phone" aria-hidden="true">
+        <div class="ph-top">
+          <div><div class="eyebrow" style="font-size:9px">Pack · tap to share</div><div class="ph-code">CLIMB-4821</div></div>
+          <div class="ph-count">6<small>RIDERS</small></div>
+        </div>
+        <div class="dial">
+          <svg viewBox="-100 -100 200 200" id="dial"></svg>
+          <div class="dial-label"><b>ON AIR</b><span>the pack hears you</span></div>
+        </div>
+        <div class="ph-btn">PAUSE MIC</div>
+      </div>
+    </section>
+
+    <section class="how" aria-label="How it works">
+      <div class="card"><div class="n">01</div><h3>Join a pack</h3>
+        <p>Enter a code like <code>CLIMB-4821</code>, or mint one and share it. Same code, same channel — at any distance, so the dropped rider still hears the front.</p></div>
+      <div class="card"><div class="n">02</div><h3>Or ride open road</h3>
+        <p>No code needed: hear any PelotonCB rider within 500 m heading your way.</p></div>
+      <div class="card"><div class="n">03</div><h3>Just talk</h3>
+        <p>Voice-activated: every phrase goes out as a short snippet. Pause any time with the big button or an earbud tap.</p></div>
+      <div class="card"><div class="n">04</div><h3>Ask the Road Guide</h3>
+        <p>"What's that lake?" "Water stop ahead?" An AI guide answers route, scenery and place questions — just to you. Everything else, it ignores.</p></div>
+    </section>
+
+    <section class="band">
+      <div>
+        <h2>Built for the road, not for your data.</h2>
+        <p style="margin-top:10px">No sign-up. A new rider name every ride. Voice is deleted after 24 hours.</p>
+      </div>
+      <ul>
+        <li>Half-duplex: your mic yields while the pack is talking — no echoes.</li>
+        <li>Wind-aware voice detection, glove-sized controls, screen stays on.</li>
+        <li>Mute or report anyone with one tap; they're never told.</li>
+        <li>Works with your Bluetooth earbuds' mic.</li>
+      </ul>
+    </section>
+  </main>
+
+  <footer class="wrap">
+    <span>PelotonCB · a sibling of <a href="https://car-radio.live/">Car Radio</a></span>
+    <span><a href="/privacy.html">Privacy</a> · <a href="mailto:otrajman@gmail.com">Contact</a></span>
+  </footer>
+
+  <script>
+    // 60-tick VOX dial, the same instrument as the app.
+    const svg = document.getElementById("dial");
+    const lit = 38;
+    for (let i = 0; i < 60; i++) {
+      const a = (i / 60) * 2 * Math.PI - Math.PI / 2;
+      const major = i % 5 === 0;
+      const r0 = major ? 74 : 79, r1 = 96;
+      const l = document.createElementNS("http://www.w3.org/2000/svg", "line");
+      l.setAttribute("x1", (Math.cos(a) * r0).toFixed(2));
+      l.setAttribute("y1", (Math.sin(a) * r0).toFixed(2));
+      l.setAttribute("x2", (Math.cos(a) * r1).toFixed(2));
+      l.setAttribute("y2", (Math.sin(a) * r1).toFixed(2));
+      l.setAttribute("stroke-width", major ? 4 : 2.6);
+      l.setAttribute("stroke-linecap", "round");
+      l.setAttribute("stroke", i < lit ? "var(--signal)" : "var(--line)");
+      if (i < lit) l.setAttribute("class", "tick on");
+      svg.appendChild(l);
+    }
+  </script>
+</body>
+</html>

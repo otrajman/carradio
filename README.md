@@ -15,6 +15,51 @@ every judgment call where v1 deviates from the PRD and why).
 | `android/` | Kotlin / Compose / Android Auto source project | Core logic **compiled + 31 JVM tests passing** here; Android-SDK layers unverified (no SDK on this machine) — see `android/HANDOFF.md` |
 | `ios/` | Swift / SwiftUI / CarPlay source project (XcodeGen) | Core logic **compiled + 41 tests passing** on Linux Swift (H3 port verified vs 6,792 h3-js fixtures); app target needs Xcode — see `ios/HANDOFF.md` |
 
+## PelotonCB — the same radio, for a group ride
+
+A second app from this codebase: **hands-free group radio for cyclists**, phone only
+(Android + iPhone, no car head units). Spec: `docs/PROTOCOL.md` §16.
+
+- **Join a pack with a code** (`CLIMB-4821`; "New code" mints one and opens the share sheet)
+  — everyone with the code hears each other at any distance. Or **ride open road**: any
+  PelotonCB rider within 500 m heading your way.
+- **Voice-activated**: once you join, the mic is open and every phrase you say goes out as
+  a snippet (≤ 10 s) — no buttons — until you **pause** it (giant on-screen button or
+  earbud tap). Half-duplex: your mic yields while the pack is talking.
+- Daylight-first, glove-sized handlebar UI; the screen stays on during a ride.
+- Same backend with no migration: packs ride in the convoy tag under a `pelotoncb:`
+  namespace, so Car Radio never hears bikes and vice versa.
+
+| | Android | iOS |
+|---|---|---|
+| Build | flavor `peloton` (`gradle assemblePelotonDebug`, app id `com.pelotoncb.app`) | XcodeGen target/scheme `PelotonCB` (`com.pelotoncb.app`) |
+| App code | `android/app/src/peloton/` | `ios/PelotonCB/` |
+| Shared with Car Radio | `src/main`: protocol core, audio, Supabase I/O, GPS, H3 | `CarRadio/Sources/Core` + `Services` |
+| New shared core | `core/PelotonTag`, `PelotonGeo`, `VoxDetector` (+ `PelotonTest`) | `Core/PelotonTag`, `VoxDetector` (+ `PelotonTests`) |
+
+Car Radio's Android-only pieces now live in the `carradio` flavor (`android/app/src/carradio/`);
+its APK/AAB paths moved to `apk/carradio/...` and `bundle/carradioRelease/...` (CI updated).
+
+## AI voices (Gemini)
+
+- **Synthetic nodes, voiced** — weather alerts + local trivia are rendered once by Gemini TTS
+  and stored in the `synthetic_voice` bucket; every client (PWA, Android, iOS, both apps)
+  plays the audio and falls back to on-device TTS of the same text. PROTOCOL §12.
+- **Road Guide** — ask about the road, the scenery, or places nearby and a Gemini Live voice
+  answers *you*. Everything else you say is ignored. A two-model verification gate with
+  deterministic rules decides, and fails closed. PROTOCOL §17.
+  `supabase/functions/road-guide/`, rules + tests in `supabase/functions/_shared/gate*.ts`.
+- **Setup**: `supabase secrets set GEMINI_API_KEY=...` (no key → text-only alerts and a silent
+  guide; nothing breaks). Optional: `ROAD_GUIDE_ENABLED=false` kill switch,
+  `GEMINI_MODEL_{CLASSIFIER,VERIFIER,TTS,LIVE}` / `GEMINI_VOICE_{TOWER,GUIDE}` overrides.
+- **Gate eval with real models**: `GEMINI_API_KEY=... node supabase/functions/road-guide/eval/run-eval.ts`
+  (fails on any false accept). Unit tests: `node --test supabase/functions/_shared/*.test.ts`.
+
+## pelotoncb.com
+
+`peloton-site/` is the PelotonCB landing page + privacy policy (static, `CNAME` included),
+served by GitHub Pages from its own repo because a Pages site takes one custom domain.
+
 ## Demo in 60 seconds
 
 Open **<https://car-radio.live/>** (Chrome recommended), or run locally:
@@ -79,7 +124,7 @@ Unit tests (`npm test`): filter math, cone asymmetry, room sets — 10 passing.
 |---|---|
 | Picovoice Porcupine | Web Speech API (PWA) / SpeechRecognizer (Android) / SFSpeechRecognizer (iOS) |
 | Mapbox road snapping | Heading-cone + speed-based dynamic radius only (`FEATURE_ROAD_SNAP` reserved) |
-| OpenAI LLM + ElevenLabs TTS | Template scripts + on-device OS TTS |
+| OpenAI LLM + ElevenLabs TTS | Template scripts voiced by **Gemini TTS** (on-device TTS fallback) |
 | Mapbox incidents | NWS weather alerts + Wikipedia geosearch |
 
 Drop keys into env config later to upgrade each seam — integration points are marked.

@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Wheel with radio arcs: an ink disc, a safety-orange wheel + hub, broadcast arcs. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#111214"
+        android:pathData="M54,54m-54,0a54,54 0,1 1,108 0a54,54 0,1 1,-108 0" />
+    <path
+        android:strokeColor="#FF4F1F"
+        android:strokeWidth="6"
+        android:fillColor="#00000000"
+        android:pathData="M54,62m-18,0a18,18 0,1 1,36 0a18,18 0,1 1,-36 0" />
+    <path
+        android:fillColor="#FF4F1F"
+        android:pathData="M54,62m-5,0a5,5 0,1 1,10 0a5,5 0,1 1,-10 0" />
+    <path
+        android:strokeColor="#F3F0E8"
+        android:strokeWidth="4"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000"
+        android:pathData="M40,34 A20,20 0 0,1 68,34" />
+    <path
+        android:strokeColor="#F3F0E8"
+        android:strokeWidth="4"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000"
+        android:pathData="M31,26 A32,32 0 0,1 77,26" />
+</vector>

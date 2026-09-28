@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PelotonCB — Privacy Policy</title>
+  <style>
+    body { background:#F3F0E8; color:#111214; font-family:system-ui,sans-serif;
+           max-width:680px; margin:0 auto; padding:40px 20px; line-height:1.6; }
+    h1 { color:#FF4F1F; letter-spacing:.06em; }
+    h2 { margin-top:2em; font-size:1.1em; color:#FF4F1F; }
+    table { border-collapse:collapse; width:100%; font-size:.95em; }
+    td,th { border:1px solid #D8D2C4; padding:8px 10px; text-align:left; }
+    a { color:#FF4F1F; }
+  </style>
+</head>
+<body>
+  <h1>PelotonCB — Privacy Policy</h1>
+  <p><em>Effective September 27, 2026</em></p>
+
+  <p>PelotonCB (a sibling app of Car Radio, sharing its backend) is built to know as little about you as possible.</p>
+
+  <h2>No accounts, no identity</h2>
+  <p>There is no sign-up. Each ride gets a random phonetic handle (like
+  "Neon Falcon") that is discarded afterward. We collect no name, email, phone number,
+  contacts, or advertising identifiers.</p>
+
+  <h2>What the app processes</h2>
+  <ul>
+    <li><strong>Location</strong> (GPS position, heading, speed): used on your device to
+    place you with nearby riders (open-road mode). Your live location is never stored on our
+    servers; a position snapshot is attached only to voice messages you choose to send.</li>
+    <li><strong>Microphone</strong>: during a ride the microphone stays open and what you say
+    is sent to your pack in short voice snippets (≤10 s), <em>until you pause it</em> (on-screen
+    button or earbud tap). Silence is never sent. Pausing stops all transmission.</li>
+  </ul>
+
+  <h2>Road Guide (AI) — optional, on by default, switch off any time</h2>
+  <p>When Road Guide is on, each voice message <em>you</em> send is also processed by
+  Google's Gemini API to decide whether it is a question or remark about the road, the
+  scenery, or places nearby. Only if it is does the guide answer — privately, to you. Everything
+  else (conversation with other riders, personal topics) is ignored and gets no reply.
+  What is sent to Google: your voice message, its transcript, and your approximate position,
+  heading and speed at that moment. Never your name or any account (there are none).
+  Transcripts and answers are kept 24 hours to check the guide behaves, then deleted.
+  Other people's messages are never sent to the Road Guide. Turn it off with the
+  "Road Guide (AI)" switch.</p>
+
+  <h2>Automatic deletion</h2>
+  <p>All data is deleted automatically, always within 90 days — most within 24 hours:</p>
+  <table>
+    <tr><th>Data</th><th>Retained</th></tr>
+    <tr><td>Voice messages and their location snapshots</td><td>24 hours</td></tr>
+    <tr><td>Messages referenced by a user report</td><td>30 days (moderation evidence)</td></tr>
+    <tr><td>Mute events</td><td>24 hours</td></tr>
+    <tr><td>User reports</td><td>30 days</td></tr>
+    <tr><td>Road Guide transcripts and answers</td><td>24 hours</td></tr>
+    <tr><td>Trip handles</td><td>up to 48 hours after their messages expire</td></tr>
+  </table>
+
+  <h2>Safety and moderation</h2>
+  <p>You can mute or report any speaker; senders are never told. Repeatedly muted or
+  reported riders are automatically silenced. Reported messages are retained up to
+  30 days solely for moderation review.</p>
+
+  <h2>Sharing</h2>
+  <p>We do not sell or share data with third parties for advertising. Data is processed
+  on Supabase (our hosting provider) solely to operate the service. Google (Gemini API)
+  processes Road Guide messages as described above and voices the local alerts. Optional
+  local alerts use public data sources (US National Weather Service, Wikipedia).</p>
+
+  <h2>Contact</h2>
+  <p>Questions or data requests: <a href="mailto:otrajman@gmail.com">otrajman@gmail.com</a></p>
+</body>
+</html>

@@ -7,12 +7,17 @@ object Constants {
         "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRyc3RlbGdlbWpkZXFxZGxhc2d3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ3NzcwNTQsImV4cCI6MjEwMDM1MzA1NH0.kSfNycRV422WIRSdINM22vkEHM0HZ8QrvsqCVdmvk24"
 
     const val STORAGE_BUCKET = "voice_bursts"
+    /** Server-rendered AI speech (Gemini TTS / Road Guide), PROTOCOL §12/§17. */
+    const val SYNTHETIC_VOICE_BUCKET = "synthetic_voice"
     const val SYNTHETIC_NODES_FN = "synthetic-nodes"
+    const val ROAD_GUIDE_FN = "road-guide"
 
     /** Full public URL for a payload audio_path (which already includes the bucket prefix). */
     fun publicAudioUrl(audioPath: String): String {
         val clean = audioPath.trimStart('/')
-        return if (clean.startsWith("$STORAGE_BUCKET/")) {
+        return if (clean.startsWith("$STORAGE_BUCKET/") ||
+            clean.startsWith("$SYNTHETIC_VOICE_BUCKET/")
+        ) {
             "$SUPABASE_URL/storage/v1/object/public/$clean"
         } else {
             "$SUPABASE_URL/storage/v1/object/public/$STORAGE_BUCKET/$clean"

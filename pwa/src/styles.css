@@ -165,6 +165,19 @@ button {
 .convoy-input:focus { outline: none; border-color: var(--amber-dim); }
 .convoy-input::placeholder { color: var(--dim); }
 
+.guide-toggle {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: min(320px, 80vw);
+  font-size: 12px;
+  line-height: 1.45;
+  text-align: left;
+  cursor: pointer;
+}
+.guide-toggle input { accent-color: var(--amber); margin-top: 2px; flex: none; }
+.guide-toggle strong { color: var(--text); font-weight: 600; }
+
 .get-apps { margin-top: 14px; font-size: 12px; letter-spacing: 0.04em; }
 .get-apps a { color: var(--text); text-decoration-color: var(--amber-dim); }
 .get-apps a:hover { color: var(--amber); }

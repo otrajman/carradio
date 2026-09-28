@@ -47,6 +47,7 @@ struct RootView: View {
 private struct StartView: View {
     @EnvironmentObject private var model: AppModel
     @AppStorage("convoy_code") private var convoyCode = ""
+    @AppStorage(Constants.roadGuideDefaultsKey) private var roadGuide = true
 
     var body: some View {
         VStack(spacing: 12) {
@@ -70,6 +71,16 @@ private struct StartView: View {
                 .onChange(of: convoyCode) { newValue in
                     model.setConvoyCode(newValue)
                 }
+            Toggle(isOn: $roadGuide) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Road Guide (AI)").font(.subheadline.weight(.semibold))
+                    Text("Answers questions about the road, scenery, and places nearby. Ignores everything else.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .tint(.green)
+            .padding(.horizontal, 40)
             Button {
                 model.startTrip()
             } label: {

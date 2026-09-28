@@ -29,6 +29,11 @@ final class PlaybackQueue: NSObject, ObservableObject {
 
     /// Called when an item actually starts playing (breadcrumb bookkeeping).
     var onItemStarted: ((Item) -> Void)?
+    /// Awaited before each item may sound. Car Radio plays immediately; PelotonCB's
+    /// half-duplex VOX (PROTOCOL §16) waits here for the rider's open snippet to finish.
+    var awaitTurn: (() async -> Void)?
+    /// Called after each item finishes (played, skipped, or dropped mid-play).
+    var onItemFinished: ((Item) -> Void)?
 
     private var queue: [Item] = []
     private var processing = false
@@ -99,6 +104,7 @@ final class PlaybackQueue: NSObject, ObservableObject {
         AudioSessionController.shared.beginPlayback()
         while !queue.isEmpty {
             let item = queue.removeFirst()
+            await awaitTurn?()
 
             // Age drop at dequeue (PROTOCOL §5.6) — breadcrumbs exempt (§6).
             if !item.isBreadcrumb {
@@ -122,11 +128,16 @@ final class PlaybackQueue: NSObject, ObservableObject {
                 await earcons.play(.incoming)
             }
 
-            // Then the burst body.
-            if let text = item.payload.text, item.payload.isSystem || item.payload.audioPath == nil {
-                await speak(text: text, item: item)
+            // Then the burst body. §12/§17: system bursts play their server-rendered AI
+            // voice when present and fall back to on-device TTS of the same text.
+            if item.payload.isSystem {
+                var played = false
+                if let path = item.payload.audioPath { played = await playVoice(path: path) }
+                if !played, let text = item.payload.text { await speak(text: text, item: item) }
             } else if let path = item.payload.audioPath {
                 await playVoice(path: path)
+            } else if let text = item.payload.text {
+                await speak(text: text, item: item)
             }
 
             lastSpeakerHandle = item.payload.handle
@@ -134,6 +145,7 @@ final class PlaybackQueue: NSObject, ObservableObject {
             currentItem = nil
             isPlaying = false
             currentHandle = nil
+            onItemFinished?(item)
         }
         processing = false
         AudioSessionController.shared.end()
@@ -141,26 +153,32 @@ final class PlaybackQueue: NSObject, ObservableObject {
 
     // MARK: Voice bursts
 
-    private func playVoice(path: String) async {
-        guard let url = Constants.publicAudioURL(for: path) else { return }
+    /// Plays a stored burst. Returns false if it could not be fetched or started.
+    @discardableResult
+    private func playVoice(path: String) async -> Bool {
+        guard let url = Constants.publicAudioURL(for: path) else { return false }
         do {
             let (data, response) = try await URLSession.shared.data(from: url)
             if let http = response as? HTTPURLResponse, http.statusCode != 200 {
                 NSLog("CarRadio playback: HTTP \(http.statusCode) for \(path)")
-                return
+                return false
             }
             let player = try AVAudioPlayer(data: data)
             player.delegate = self
             audioPlayer = player
+            var started = true
             await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
                 finishContinuation = continuation
                 if !player.play() {
+                    started = false
                     resumeFinish()
                 }
             }
             audioPlayer = nil
+            return started
         } catch {
             NSLog("CarRadio playback failed for \(path): \(error)")
+            return false
         }
     }
 

@@ -21,10 +21,33 @@ final class AudioSessionController {
         case recording
     }
 
+    /// PelotonCB (PROTOCOL §16): the mic stays open for the whole ride, so the session is
+    /// pinned to `.playAndRecord` and the per-burst begin/end calls below become no-ops
+    /// instead of tearing down the always-on input.
+    private(set) var pinnedForVox = false
+
     private init() {}
+
+    /// Pins a mixable voice session for an always-on VOX mic (earbud mic via Bluetooth HFP).
+    func pinForVox() {
+        configure(
+            category: .playAndRecord,
+            sessionMode: .voiceChat,
+            options: [.allowBluetooth, .defaultToSpeaker, .mixWithOthers]
+        )
+        pinnedForVox = isActive
+        mode = .recording
+    }
+
+    /// Releases the pinned session (end of ride).
+    func unpinVox() {
+        pinnedForVox = false
+        end()
+    }
 
     /// Ducking playback session (PROTOCOL §10).
     func beginPlayback() {
+        guard !pinnedForVox else { return }
         configure(
             category: .playback,
             sessionMode: .spokenAudio,
@@ -35,6 +58,7 @@ final class AudioSessionController {
 
     /// Mic-open session. `.playAndRecord` so earcons and monitoring still work.
     func beginRecording() {
+        guard !pinnedForVox else { return }
         configure(
             category: .playAndRecord,
             sessionMode: .spokenAudio,
@@ -45,7 +69,7 @@ final class AudioSessionController {
 
     /// Ends the current mode and lets other audio resume at full volume.
     func end() {
-        guard isActive else { return }
+        guard isActive, !pinnedForVox else { return }
         do {
             try session.setActive(false, options: [.notifyOthersOnDeactivation])
             isActive = false

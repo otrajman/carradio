@@ -1,7 +1,13 @@
 // RadioEngine: one instance per trip. Owns GPS → rooms → filter → play queue,
 // plus the send pipeline. UI layers (drive mode, simulator) only observe it.
 import type { RealtimeChannel } from "@supabase/supabase-js";
-import { BUCKET, SUPABASE_ANON_KEY, SUPABASE_URL, SYNTHETIC_NODES } from "../config";
+import {
+  BUCKET,
+  roadGuideEnabled,
+  SUPABASE_ANON_KEY,
+  SUPABASE_URL,
+  SYNTHETIC_NODES,
+} from "../config";
 import {
   BURST_MAX_AGE_S,
   BREADCRUMB_MIN_GAP_MS,
@@ -389,6 +395,7 @@ export class RadioEngine {
         payload,
       );
       earcons.sent();
+      if (roadGuideEnabled()) void this.askRoadGuide(payload);
     } finally {
       this.sending = false;
       this.publish();
@@ -509,6 +516,45 @@ export class RadioEngine {
       },
       true,
     );
+  }
+
+  // ---- Road Guide (§17) ----
+  /** The server gates this burst; only route/scenery/POI talk gets a private answer. */
+  private async askRoadGuide(sent: BurstPayload) {
+    try {
+      const res = await fetch(`${SUPABASE_URL}/functions/v1/road-guide`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          trip_id: sent.trip_id,
+          message_id: sent.message_id,
+          lat: sent.lat,
+          lng: sent.lng,
+          heading: sent.heading,
+          speed: sent.speed,
+        }),
+      });
+      if (!res.ok) return;
+      const r = await res.json();
+      if (r?.respond !== true || typeof r.text !== "string" || !this.started) return;
+      this.queue.enqueue({
+        messageId: typeof r.id === "string" ? r.id : crypto.randomUUID(),
+        tripId: "road-guide",
+        handle: "Road Guide",
+        kind: "system",
+        audioPath: typeof r.audio_path === "string" ? r.audio_path : null,
+        text: r.text,
+        createdAt: new Date().toISOString(),
+        isBreadcrumb: true, // private answer: age-exempt
+        voiceSeed: 0,
+      });
+      this.publish();
+    } catch {
+      // offline or gated — silence is the correct failure mode
+    }
   }
 
   // ---- synthetic nodes (§12) ----

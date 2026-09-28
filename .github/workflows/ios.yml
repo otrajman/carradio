@@ -30,6 +30,17 @@ jobs:
             exit 1
           fi
           tail -5 build.log
+      - name: Build PelotonCB (simulator, no signing)
+        run: |
+          if ! xcodebuild -project CarRadio.xcodeproj -scheme PelotonCB \
+            -destination 'generic/platform=iOS Simulator' \
+            -configuration Debug build \
+            CODE_SIGNING_ALLOWED=NO > peloton-build.log 2>&1; then
+            echo "== PELOTONCB BUILD FAILED, errors: =="
+            grep -E "error:" peloton-build.log | sort -u | head -60
+            exit 1
+          fi
+          tail -5 peloton-build.log
       - name: Unit tests (core)
         run: |
           if ! xcodebuild -project CarRadio.xcodeproj -scheme CarRadio \

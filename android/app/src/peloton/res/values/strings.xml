@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">PelotonCB</string>
+    <string name="notification_channel_name">PelotonCB ride</string>
+    <string name="notification_title">PelotonCB — mic open</string>
+    <string name="notification_title_paused">PelotonCB — mic paused</string>
+    <string name="notification_pause">Pause mic</string>
+    <string name="notification_resume">Resume mic</string>
+    <string name="notification_skip">Skip / Mute</string>
+    <string name="notification_leave">Leave ride</string>
+</resources>

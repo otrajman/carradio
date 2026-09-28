@@ -31,7 +31,12 @@ class PlaybackQueue(
     private val focus: AudioFocusHelper,
     private val tts: TtsSpeaker,
     private val onStarted: (BurstPayload) -> Unit = {},
-    private val onEnded: (BurstPayload) -> Unit = {}
+    private val onEnded: (BurstPayload) -> Unit = {},
+    /**
+     * Suspends until the speaker may sound. Car Radio plays immediately; PelotonCB's
+     * half-duplex VOX (PROTOCOL §16) waits here for the rider's open snippet to finish.
+     */
+    private val awaitTurn: suspend () -> Unit = {}
 ) {
 
     data class QueuedBurst(
@@ -58,6 +63,7 @@ class PlaybackQueue(
     init {
         scope.launch {
             for (item in channel) {
+                awaitTurn()
                 if (!item.isBreadcrumb && burstAgeMs(item) > Constants.LIVE_BURST_MAX_AGE_MS) {
                     continue
                 }
@@ -97,9 +103,18 @@ class PlaybackQueue(
         onStarted(payload)
         focus.acquire()
         try {
-            if (payload.isSystem || payload.audioPath == null) {
-                val text = payload.text ?: return
+            if (payload.isSystem) {
                 earcons.system() // triple-chime always precedes system playback
+                // §12: server-rendered AI voice when present; on-device TTS of the same text
+                // if there is no audio or it fails to play.
+                val played = payload.audioPath?.let { playUrl(Constants.publicAudioUrl(it)) } ?: false
+                if (!played) {
+                    val text = payload.text ?: return
+                    tts.speak((item.speakPrefix ?: "") + text)
+                }
+            } else if (payload.audioPath == null) {
+                val text = payload.text ?: return
+                earcons.system()
                 tts.speak((item.speakPrefix ?: "") + text)
             } else {
                 if (item.isBreadcrumb) earcons.breadcrumb() else earcons.incoming()
@@ -116,14 +131,15 @@ class PlaybackQueue(
         }
     }
 
-    private suspend fun playUrl(url: String) {
-        withTimeoutOrNull(PLAYBACK_TIMEOUT_MS) {
-            suspendCancellableCoroutine<Unit> { cont ->
+    /** Plays one URL to the end. Returns false if it errored or timed out. */
+    private suspend fun playUrl(url: String): Boolean {
+        val ok = withTimeoutOrNull(PLAYBACK_TIMEOUT_MS) {
+            suspendCancellableCoroutine<Boolean> { cont ->
                 val listener = object : Player.Listener {
                     override fun onPlaybackStateChanged(playbackState: Int) {
                         if (playbackState == Player.STATE_ENDED || playbackState == Player.STATE_IDLE) {
                             player.removeListener(this)
-                            if (cont.isActive) cont.resume(Unit)
+                            if (cont.isActive) cont.resume(playbackState == Player.STATE_ENDED)
                         }
                     }
 
@@ -131,7 +147,7 @@ class PlaybackQueue(
                         player.removeListener(this)
                         player.stop()
                         player.clearMediaItems()
-                        if (cont.isActive) cont.resume(Unit)
+                        if (cont.isActive) cont.resume(false)
                     }
                 }
                 player.addListener(listener)
@@ -149,6 +165,7 @@ class PlaybackQueue(
         }
         // Leave the player empty between bursts.
         player.clearMediaItems()
+        return ok == true
     }
 
     private fun burstAgeMs(item: QueuedBurst): Long = try {

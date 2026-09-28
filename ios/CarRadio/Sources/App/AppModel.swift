@@ -352,13 +352,18 @@ final class AppModel: ObservableObject {
         guard let url, let tripID, let gps = currentGps else { return }
         let currentHandle = handle
         Task {
-            await sendPipeline.sendBurst(
+            let sent = await sendPipeline.sendBurst(
                 fileURL: url,
                 tripID: tripID,
                 handle: currentHandle,
                 state: gps,
                 convoyTag: convoyTag
             )
+            // §17: the gated Road Guide may answer this driver privately.
+            if let sent, Constants.roadGuideEnabled,
+               let answer = await supabase.askRoadGuide(about: sent), phase == .live {
+                playback.enqueue(PlaybackQueue.Item(payload: answer, isBreadcrumb: true))
+            }
         }
     }
 }

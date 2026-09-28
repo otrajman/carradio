@@ -175,6 +175,53 @@ final class SupabaseService {
             .upload(path, data: data, options: FileOptions(contentType: "audio/mp4"))
     }
 
+    // MARK: Road Guide (PROTOCOL §17)
+
+    private struct RoadGuideRequest: Encodable {
+        let trip_id: String
+        let message_id: String
+        let lat: Double
+        let lng: Double
+        let heading: Double
+        let speed: Double
+    }
+
+    private struct RoadGuideResponse: Decodable {
+        let respond: Bool
+        let id: String?
+        let text: String?
+        let audio_path: String?
+    }
+
+    /// Asks the gated Road Guide about a burst this trip just sent. Returns a local-only
+    /// system burst to play, or nil (stay silent) — off-topic, gated, disabled, or any error.
+    func askRoadGuide(about sent: BurstPayload) async -> BurstPayload? {
+        do {
+            let response: RoadGuideResponse = try await client.functions.invoke(
+                Constants.roadGuideFunction,
+                options: FunctionInvokeOptions(body: RoadGuideRequest(
+                    trip_id: sent.tripID, message_id: sent.messageID,
+                    lat: sent.lat, lng: sent.lng, heading: sent.heading, speed: sent.speed
+                ))
+            )
+            guard response.respond, let text = response.text else { return nil }
+            return BurstPayload(
+                messageID: response.id ?? UUID().uuidString.lowercased(),
+                tripID: "road-guide",
+                handle: "Road Guide",
+                kind: "system",
+                audioPath: response.audio_path,
+                text: text,
+                lat: sent.lat, lng: sent.lng, heading: 0, speed: 0,
+                h3R9: "",
+                createdAt: WireDate.string(from: Date())
+            )
+        } catch {
+            NSLog("CarRadio road-guide failed: \(error)")
+            return nil
+        }
+    }
+
     // MARK: Synthetic nodes (PROTOCOL §12)
 
     private struct SyntheticBody: Encodable {

@@ -87,6 +87,7 @@ class RadioService : Service() {
     // feature flags (mirrored from DataStore)
     @Volatile private var wakeWordEnabled = true
     @Volatile private var syntheticEnabled = true
+    @Volatile private var roadGuideEnabled = true
 
     private val syntheticCalledCells = mutableSetOf<String>()
 
@@ -222,6 +223,9 @@ class RadioService : Service() {
             .launchIn(scope)
         settings.syntheticNodesEnabled
             .onEach { syntheticEnabled = it }
+            .launchIn(scope)
+        settings.roadGuideEnabled
+            .onEach { roadGuideEnabled = it }
             .launchIn(scope)
 
         scope.launch {
@@ -406,12 +410,30 @@ class RadioService : Service() {
             roomManager.broadcastBurst(payload)
 
             earcons.sent()
+            if (roadGuideEnabled) askRoadGuide(payload)
             RadioState.statusMessage.value = null
         } catch (e: Exception) {
             Log.e(TAG, "send pipeline failed", e)
             RadioState.statusMessage.value = "Send failed — check connection"
         } finally {
             file.delete()
+        }
+    }
+
+    /**
+     * PROTOCOL §17: the Road Guide hears what this driver just said and, only if it passes
+     * the server's verification gate (route / scenery / POI talk), answers privately.
+     */
+    private fun askRoadGuide(sent: BurstPayload) {
+        scope.launch {
+            val answer = repository.askRoadGuide(sent) ?: return@launch
+            val fix = lastFix ?: return@launch
+            playbackQueue.enqueue(
+                PlaybackQueue.QueuedBurst(
+                    payload = answer.toPayload(fix.lat, fix.lng, ROAD_GUIDE_HANDLE, ROAD_GUIDE_TRIP),
+                    isBreadcrumb = true // age-exempt: the answer is for this driver
+                )
+            )
         }
     }
 
@@ -460,20 +482,10 @@ class RadioService : Service() {
         if (!syntheticCalledCells.add(cell)) return // at most once per res-7 cell per session
         scope.launch {
             val scripts = repository.fetchSyntheticScripts(fix.lat, fix.lng)
-            for (text in scripts) {
+            for (script in scripts) {
                 playbackQueue.enqueue(
                     PlaybackQueue.QueuedBurst(
-                        payload = BurstPayload(
-                            messageId = UUID.randomUUID().toString(),
-                            tripId = "synthetic-node",
-                            handle = "System",
-                            kind = BurstPayload.KIND_SYSTEM,
-                            audioPath = null,
-                            text = text,
-                            lat = fix.lat,
-                            lng = fix.lng,
-                            createdAt = Instant.now().toString()
-                        ),
+                        payload = script.toPayload(fix.lat, fix.lng, "System", "synthetic-node"),
                         isBreadcrumb = true // age-exempt
                     )
                 )
@@ -571,6 +583,8 @@ class RadioService : Service() {
     companion object {
         private const val TAG = "RadioService"
         private const val NOTIFICATION_ID = 41
+        private const val ROAD_GUIDE_HANDLE = "Road Guide"
+        private const val ROAD_GUIDE_TRIP = "road-guide"
 
         const val ACTION_TOGGLE_TALK = "com.carradio.app.action.TOGGLE_TALK"
         const val ACTION_SKIP_MUTE = "com.carradio.app.action.SKIP_MUTE"

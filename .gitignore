@@ -14,3 +14,4 @@ ios/DerivedData/
 pwa/dist-hosted/
 .toolchain/
 .secrets/
+*.tsbuildinfo

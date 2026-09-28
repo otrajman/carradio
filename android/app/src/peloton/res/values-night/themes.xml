@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.Peloton" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/peloton_background</item>
+        <item name="android:statusBarColor">@color/peloton_background</item>
+        <item name="android:navigationBarColor">@color/peloton_background</item>
+        <item name="android:windowLightStatusBar">false</item>
+    </style>
+    <color name="peloton_background">#0E0F11</color>
+</resources>

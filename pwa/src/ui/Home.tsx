@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { ROAD_GUIDE, roadGuideEnabled, setRoadGuideEnabled } from "../config";
 import { generateHandle } from "../protocol/handles";
 import { Ring } from "./Ring";
 
@@ -8,6 +9,7 @@ export function Home(props: {
 }) {
   const [handle] = useState(generateHandle);
   const [convoyCode, setConvoyCode] = useState("");
+  const [roadGuide, setRoadGuide] = useState(roadGuideEnabled);
   return (
     <div className="home">
       <div className="home-inner">
@@ -47,6 +49,23 @@ export function Home(props: {
           autoCapitalize="none"
           autoCorrect="off"
         />
+
+        {ROAD_GUIDE && (
+          <label className="guide-toggle rise r5">
+            <input
+              type="checkbox"
+              checked={roadGuide}
+              onChange={(e) => {
+                setRoadGuide(e.target.checked);
+                setRoadGuideEnabled(e.target.checked);
+              }}
+            />
+            <span>
+              <strong>Road Guide (AI)</strong>
+              <span className="dim"> answers questions about the road, scenery &amp; places nearby — nothing else</span>
+            </span>
+          </label>
+        )}
 
         <div className="get-apps rise r6">
           <span className="dim">native apps (dev builds): </span>

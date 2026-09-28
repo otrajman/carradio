@@ -25,6 +25,12 @@ final class LocationService: NSObject, CLLocationManagerDelegate {
         manager.pausesLocationUpdatesAutomatically = false
     }
 
+    /// Car Radio drives (.automotiveNavigation); PelotonCB rides (.fitness).
+    var activityType: CLActivityType {
+        get { manager.activityType }
+        set { manager.activityType = newValue }
+    }
+
     func requestPermissionAndStart() {
         switch manager.authorizationStatus {
         case .notDetermined:

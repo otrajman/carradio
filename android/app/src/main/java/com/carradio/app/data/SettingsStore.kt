@@ -29,6 +29,13 @@ class SettingsStore(private val context: Context) {
     val syntheticNodesEnabled: Flow<Boolean> =
         context.dataStore.data.map { it[KEY_SYNTHETIC] ?: true }
 
+    /** PROTOCOL §17 Road Guide (Gemini): answers route/scenery/POI talk. */
+    val roadGuideEnabled: Flow<Boolean> =
+        context.dataStore.data.map { it[KEY_ROAD_GUIDE] ?: true }
+
+    suspend fun setRoadGuideEnabled(value: Boolean) =
+        context.dataStore.edit { it[KEY_ROAD_GUIDE] = value }
+
     val convoyCode: Flow<String> =
         context.dataStore.data.map { it[KEY_CONVOY_CODE] ?: "" }
 
@@ -86,6 +93,7 @@ class SettingsStore(private val context: Context) {
 
         private val KEY_WAKEWORD = booleanPreferencesKey("feature_wakeword")
         private val KEY_SYNTHETIC = booleanPreferencesKey("feature_synthetic_nodes")
+        private val KEY_ROAD_GUIDE = booleanPreferencesKey("feature_road_guide")
         private val KEY_FAKE_GPS = booleanPreferencesKey("feature_fake_gps")
         private val KEY_CONVOY_CODE = stringPreferencesKey("convoy_code")
         private val KEY_TRIP_ID = stringPreferencesKey("trip_id")

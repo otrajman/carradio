@@ -185,9 +185,15 @@ SYNTHETIC_NODES=true|false             # call synthetic-nodes edge function on c
 - Edge Function `synthetic-nodes` (POST `{ lat, lng }`) checks NWS alerts (api.weather.gov)
   and Wikipedia GeoSearch (both keyless), templates conversational scripts, inserts them as
   `kind=system` breadcrumb messages (deduped per cell per 6 h), and returns them.
-- Clients with `SYNTHETIC_NODES=true` call it at most once per res-7 cell per session, play
-  returned scripts via local TTS (triple-chime first). Everyone else picks them up via
-  breadcrumbs.
+- Clients with `SYNTHETIC_NODES=true` call it at most once per res-7 cell per session and
+  play the returned scripts (triple-chime first). Everyone else picks them up via
+  breadcrumbs. PelotonCB calls it too (played to the rider only, never to the pack).
+- **Voiced by Gemini TTS** (2026-09): each new script is rendered once server-side
+  (`GEMINI_MODEL_TTS`, "Radio Tower" voice) and stored as WAV in the `synthetic_voice`
+  bucket; the row's `audio_path` is `synthetic_voice/nodes/<uuid>.wav`. Clients play a
+  system burst's `audio_path` when present and **fall back to local TTS of `text`** when
+  it's null or fails to play (no key configured, TTS error). `text` is always present.
+- `publicAudioUrl` must accept both bucket prefixes (`voice_bursts/`, `synthetic_voice/`).
 
 ## 13. Drive Mode lock
 
@@ -218,6 +224,8 @@ Opt-in private channel for a group that knows a shared invite code (road-trip co
 | Data | Retained |
 |---|---|
 | Voice/text messages + audio objects | 24 h |
+| `synthetic_voice` objects (AI speech) | 24 h |
+| `road_guide_events` (transcripts, answers, gate reasons) | 24 h |
 | …unless referenced by a report | 30 days (moderation evidence) |
 | mute_events | 24 h |
 | reports | 30 days |
@@ -226,3 +234,111 @@ Opt-in private channel for a group that knows a shared invite code (road-trip co
 
 Everything is deleted automatically well inside 90 days. There are no user accounts;
 trips are anonymous ephemeral identities.
+
+## 16. PelotonCB (group ride radio for cyclists)
+
+A second app built from the same codebase (Android flavor `peloton`, iOS target `PelotonCB`).
+Same backend, same trips/handles (§1), send pipeline (§4), moderation (§8), earcons (§9) and
+retention (§15). What differs is **who hears you** and **how you transmit**. No schema
+change: peloton traffic rides in the §14 `convoy` field / `messages.convoy_tag` column.
+
+### 16.1 Pack identity
+
+- **Pack (join by code)**: normalize the code to ASCII `[a-z0-9]` only (lowercase, drop
+  everything else — "Hill-4821" == "hill 4821"); must be ≥ 4 chars.
+  `pack_tag = first 16 hex of SHA-256("pelotoncb:code:" + normalized)`.
+  Vector: `HILL-4821` → `0675040865c1d052`.
+- **Open road (geo)**: fixed `pack_tag = first 16 hex of SHA-256("pelotoncb:open")` =
+  `edf37905db8bba1b`.
+- The `pelotoncb:` namespace guarantees a bike code never equals a car convoy tag, so Car
+  Radio clients drop all peloton bursts by the existing §14 rules, and car breadcrumbs
+  (`p_convoy` null) never return peloton rows.
+- Share codes are minted as `<WORD>-<4 digits>` (e.g. `CLIMB-4821`).
+
+### 16.2 Channels
+
+| Mode | Subscribe | Publish | Presence |
+|---|---|---|---|
+| Pack | `peloton:pack:<pack_tag>` only — no geography, a dropped rider 5 km back still hears the pack | same channel | same channel (= roster) |
+| Open road | `peloton:geo:<h3_res8>` for `gridDisk(own_res8, 1)` | own res-8 cell only | own cell only |
+
+Presence payload is §3's with `kind: "rider"`. Res-8 k-ring 1 covers the 500 m reach from
+anywhere in the own cell, so a single publish suffices.
+
+### 16.3 Receive filter
+
+Run §5.1–§5.3 (self, dedupe, mute) and the §14 tag rule with `convoyTag = pack_tag`
+(matching tag → play; anything else → drop; system bursts are ignored). Then:
+
+- **Pack**: play. No heading or distance gating.
+- **Open road**: `haversine(S, R) ≤ 500 m`, and when both S and R move ≥ 3 m/s,
+  `headingDot(S, R) ≥ 0.5` (±60° — switchbacks match, an oncoming group doesn't).
+  Symmetric: riders behind you count (no forward cone).
+
+§5.6 queueing / 60 s age drop apply unchanged. No breadcrumbs or synthetic nodes.
+
+### 16.4 Voice-activated transmit (VOX)
+
+Once a ride starts the mic is open; each spoken phrase becomes one burst — no button.
+The rider pauses/resumes transmit (screen button or earbud Play/Pause). Shared state
+machine `VoxDetector` (Kotlin + Swift, identical tests), fed one dBFS level per frame:
+
+- Noise floor = minimum frame level over a sliding 2 s window (tracks steady wind/road
+  noise; speech's inter-word dips keep it from tracking the voice). 600 ms warmup.
+- Onset: level ≥ max(floor + 14 dB, −50 dBFS) for 120 ms. Clients keep a 400 ms pre-roll
+  and write it first so the first syllable isn't clipped.
+- Release: 1.1 s below max(floor + 8 dB, −56 dBFS) ends the phrase. < 250 ms of speech →
+  discard. Clients write at most 250 ms of the trailing silence.
+- Cap: at 10 s (§4) the snippet is sent and capture continues into a new one.
+- Audio: AAC-LC `.m4a` on both platforms (`audio/mp4`), path `<trip_id>/<message_id>.m4a`.
+- **Half-duplex**: before an incoming burst plays, the receiver lets the rider's current
+  phrase finish (≤ 10 s, then it is sent), holds the mic while the pack plays, and reopens
+  it ~350 ms after the last burst. A rider never re-transmits a teammate from the speaker.
+- No "sent" earcon (it would land in the next phrase); `micOpen` plays on resume *before*
+  the mic reopens, `muted` on pause.
+- Media buttons: Play/Pause → pause/resume transmit, Next → skip + stealth mute (§8).
+
+## 17. Road Guide (gated Gemini voice, Car Radio + PelotonCB)
+
+An AI guide that answers a traveler's own talk about **the route, road conditions, the
+scenery, points of interest, local history, or weather on the route** — privately, to that
+traveler — and stays silent for everything else. Opt-out switch on every client
+(default on); server kill switch `ROAD_GUIDE_ENABLED=false`; no `GEMINI_API_KEY` → silent.
+
+### 17.1 Client contract
+
+After a successful §4 send (never for shadowbanned pretend-sends), if the switch is on:
+
+`POST /functions/v1/road-guide { trip_id, message_id, lat, lng, heading, speed }`
+→ `{ respond: false }` (the default, for any reason, including errors), or
+→ `{ respond: true, id, text, audio_path, handle: "Road Guide" }`.
+
+On `respond: true`, enqueue a **local-only** `kind=system` burst (`trip_id: "road-guide"`,
+age-exempt, triple-chime, plays `audio_path` with `text` TTS fallback). It is never
+broadcast, never a breadcrumb, and cannot be muted or reported (it's the traveler's own
+request). In PelotonCB it goes through the half-duplex turn like any burst.
+
+### 17.2 Verification gate (server; every layer fails closed)
+
+1. **Request**: the message must exist, belong to `trip_id`, be `kind=voice`, < 2 min old,
+   and live under `voice_bursts/<trip_id>/`. Shadowbanned trips get silence.
+   Rate limits per trip: ≤ 20 evaluations / 10 min, ≥ 20 s between answers, ≤ 30 answers / h.
+2. **Classifier** (model A, `GEMINI_MODEL_CLASSIFIER`, audio in): transcript + `on_topic`,
+   `category` (enum), `warrants_response`, `confidence`, `injection_suspected` — JSON schema.
+3. **Deterministic transcript screen**: ≥ 3 words, ≤ 600 chars, no URLs, no
+   prompt-injection phrasing (role changes, "ignore instructions", "system prompt", fake tags).
+4. **Independent verifier** (model B, `GEMINI_MODEL_VERIFIER`, transcript only, different
+   prompt, transcript fenced as data). Two-key rule: both must say on-topic in an allowed
+   category with confidence ≥ 0.8, and the classifier must say a response is warranted.
+5. **Answer**: Gemini Live (`GEMINI_MODEL_LIVE`, Google Search tool) gets the *gated
+   transcript* (never raw audio) plus location context (position, heading, speed, named
+   places within 10 km with ahead/left/right/behind). Scope-locked system instruction;
+   1–3 sentences, < 60 words.
+6. **Output gate**: deterministic screen (3–70 words, no markup/links, no
+   eyes-off-road / speed-up instructions, no persona leaks) + output verifier (model B):
+   on-topic, actually answers, not unsafe, not speculative, confidence ≥ 0.8.
+7. Only then: WAV → `synthetic_voice/guide/<trip_id>/<uuid>.wav`, logged `responded`.
+
+Rules live in `supabase/functions/_shared/gate.ts` (models supply verdicts; code decides),
+unit-tested in `gate.test.ts`. `road-guide/eval/run-eval.ts` runs 27 voiced cases through
+the real models; **any false accept fails the run**.
