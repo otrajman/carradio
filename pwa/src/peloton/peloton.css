@@ -1,0 +1,144 @@
+/* PelotonCB — daylight-first handlebar UI. Same tokens as pelotoncb.com and the native apps:
+   cream paper, ink type, signal orange for "on air", pack green for "incoming". */
+:root {
+  --bg: #F3F0E8; --surface: #FFFFFF; --ink: #111214; --muted: #66656B;
+  --line: #D8D2C4; --signal: #FF4F1F; --on-signal: #111214; --pack: #0B8F63; --on-pack: #FFFFFF;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0E0F11; --surface: #1A1B1F; --ink: #F2F0EA; --muted: #8E8D94;
+    --line: #2C2D33; --signal: #FF6A3D; --pack: #34D399; --on-pack: #0E0F11;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0E0F11; --surface: #1A1B1F; --ink: #F2F0EA; --muted: #8E8D94;
+  --line: #2C2D33; --signal: #FF6A3D; --pack: #34D399; --on-pack: #0E0F11;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body, #root { height: 100%; }
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--sans);
+  line-height: 1.4;
+  overscroll-behavior: none;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-user-select: none;
+  user-select: none;
+}
+button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
+button:disabled { cursor: default; }
+a { color: inherit; }
+
+.pl-screen {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: max(12px, env(safe-area-inset-top)) 16px max(12px, env(safe-area-inset-bottom));
+  max-width: 520px;
+  margin: 0 auto;
+}
+.pl-eyebrow {
+  font-size: 11px; font-weight: 800; letter-spacing: 0.22em; text-transform: uppercase;
+  color: var(--muted);
+}
+.pl-muted { color: var(--muted); }
+.pl-fine { font-size: 13px; color: var(--muted); text-align: center; }
+.pl-fainter { opacity: 0.7; font-size: 12px; }
+.pl-error { color: var(--signal); font-weight: 700; font-size: 14px; text-align: center; margin-top: 10px; }
+.pl-status { color: var(--signal); font-weight: 700; font-size: 15px; text-align: center; margin-bottom: 8px; }
+
+/* ---- buttons ---- */
+.pl-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-height: 56px; padding: 0 18px; border-radius: 14px;
+  font-weight: 900; font-size: 16px; letter-spacing: 0.04em;
+  transition: transform 80ms ease;
+}
+.pl-btn:active:not(:disabled) { transform: scale(0.98); }
+.pl-btn:disabled { opacity: 0.45; }
+.pl-btn-big { width: 100%; min-height: 64px; font-size: 20px; }
+.pl-btn-huge { min-height: 104px; font-size: 30px; border-radius: 18px; }
+.pl-btn-primary { background: var(--signal); color: var(--on-signal); }
+.pl-btn-ink { background: var(--ink); color: var(--bg); }
+.pl-btn-ghost { background: var(--surface); border: 2px solid var(--line); color: var(--ink); }
+
+/* ---- join ---- */
+.pl-join { justify-content: center; gap: 12px; text-align: center; }
+.pl-wordmark { display: inline-flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.pl-wordmark b { font-size: 30px; font-weight: 900; letter-spacing: -0.5px; }
+.pl-wordmark i {
+  font-style: normal; font-weight: 900; font-size: 20px; background: var(--signal);
+  color: var(--on-signal); border-radius: 6px; padding: 0 7px;
+}
+.pl-h1 {
+  font-size: clamp(34px, 9vw, 48px); line-height: 0.98; font-weight: 900;
+  letter-spacing: -0.03em; margin: 4px 0 14px;
+}
+.pl-h1 em { font-style: normal; color: var(--signal); }
+.pl-code-row { display: flex; gap: 10px; width: 100%; }
+.pl-code-input {
+  flex: 1; min-width: 0; min-height: 56px; padding: 0 14px; border-radius: 14px;
+  border: 2px solid var(--line); background: var(--surface); color: var(--ink);
+  font-family: var(--mono); font-weight: 900; font-size: 22px; letter-spacing: 0.06em;
+  text-transform: uppercase; text-align: center; outline: none;
+}
+.pl-code-input:focus { border-color: var(--ink); }
+.pl-code-input::placeholder { color: var(--line); text-transform: none; letter-spacing: 0.02em; }
+.pl-or { font-size: 13px; font-weight: 800; letter-spacing: 0.2em; color: var(--muted); }
+.pl-toggle {
+  display: flex; gap: 12px; align-items: flex-start; text-align: left; width: 100%;
+  background: var(--surface); border: 2px solid var(--line); border-radius: 14px;
+  padding: 12px 14px; font-size: 14px; margin-top: 6px;
+}
+.pl-toggle input { width: 22px; height: 22px; margin-top: 1px; accent-color: var(--signal); flex: none; }
+.pl-toggle strong { font-weight: 900; letter-spacing: 0.04em; }
+.pl-bottom { margin-top: 18px; }
+
+/* ---- ride ---- */
+.pl-ride { justify-content: space-between; gap: 10px; height: 100%; }
+.pl-top { display: flex; width: 100%; align-items: center; gap: 12px; }
+.pl-where {
+  flex: 1; min-width: 0; text-align: left; display: flex; flex-direction: column;
+  gap: 2px; padding: 4px 6px; border-radius: 12px;
+}
+.pl-where:not(:disabled):active { background: var(--surface); }
+.pl-where-main {
+  font-size: 24px; font-weight: 900; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.pl-where-main.mono { font-family: var(--mono); letter-spacing: 0.04em; }
+.pl-riders { display: flex; flex-direction: column; align-items: flex-end; }
+.pl-riders b { font-size: 40px; font-weight: 900; line-height: 1; }
+.pl-riders b.pack { color: var(--pack); }
+.pl-riders b.muted { color: var(--muted); }
+
+.pl-dial-wrap {
+  position: relative; width: 86%; max-width: 380px; aspect-ratio: 1;
+  display: grid; place-items: center; flex: 1; min-height: 0; margin: 4px 0;
+}
+.pl-dial { width: 100%; height: 100%; max-height: 100%; }
+.pl-dial line { stroke: var(--line); stroke-width: 3; stroke-linecap: round; }
+.pl-dial.ink line.on { stroke: var(--ink); }
+.pl-dial.signal line.on { stroke: var(--signal); stroke-width: 4; }
+.pl-dial.pack line.on { stroke: var(--pack); stroke-width: 4; }
+.pl-dial.muted line.on { stroke: var(--muted); }
+.pl-dial-label { position: absolute; text-align: center; pointer-events: none; }
+.pl-dial-label b { display: block; font-size: 30px; font-weight: 900; letter-spacing: 0.04em; }
+.pl-dial-label b.signal { color: var(--signal); }
+.pl-dial-label b.pack { color: var(--pack); }
+.pl-dial-label b.ink { color: var(--ink); }
+.pl-dial-label b.muted { color: var(--muted); }
+.pl-dial-label span { font-size: 17px; font-weight: 600; color: var(--muted); }
+
+.pl-row { display: flex; gap: 10px; width: 100%; }
+.pl-row .pl-btn { flex: 1; min-height: 56px; font-size: 14px; padding: 0 8px; }
+.pl-row .pl-btn:last-child { flex: 0.8; }
+
+@media (max-height: 640px) {
+  .pl-btn-huge { min-height: 84px; font-size: 24px; }
+  .pl-dial-label b { font-size: 24px; }
+}

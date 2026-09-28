@@ -24,6 +24,7 @@ import type { Breadcrumb, BurstPayload, DropReason, GpsFix } from "../protocol/t
 import { latLngToCell } from "h3-js";
 import { PlayQueue, earcons, voiceSeedOf } from "./audio";
 import type { LocationProvider } from "./location";
+import { requestRoadGuide } from "./roadGuide";
 import { supabase } from "./supabase";
 
 export interface PresencePeer {
@@ -519,42 +520,11 @@ export class RadioEngine {
   }
 
   // ---- Road Guide (§17) ----
-  /** The server gates this burst; only route/scenery/POI talk gets a private answer. */
   private async askRoadGuide(sent: BurstPayload) {
-    try {
-      const res = await fetch(`${SUPABASE_URL}/functions/v1/road-guide`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          trip_id: sent.trip_id,
-          message_id: sent.message_id,
-          lat: sent.lat,
-          lng: sent.lng,
-          heading: sent.heading,
-          speed: sent.speed,
-        }),
-      });
-      if (!res.ok) return;
-      const r = await res.json();
-      if (r?.respond !== true || typeof r.text !== "string" || !this.started) return;
-      this.queue.enqueue({
-        messageId: typeof r.id === "string" ? r.id : crypto.randomUUID(),
-        tripId: "road-guide",
-        handle: "Road Guide",
-        kind: "system",
-        audioPath: typeof r.audio_path === "string" ? r.audio_path : null,
-        text: r.text,
-        createdAt: new Date().toISOString(),
-        isBreadcrumb: true, // private answer: age-exempt
-        voiceSeed: 0,
-      });
-      this.publish();
-    } catch {
-      // offline or gated — silence is the correct failure mode
-    }
+    const answer = await requestRoadGuide(sent);
+    if (!answer || !this.started) return;
+    this.queue.enqueue(answer);
+    this.publish();
   }
 
   // ---- synthetic nodes (§12) ----
@@ -578,8 +548,12 @@ export class RadioEngine {
 }
 
 // ---- REST broadcast fan-out (publish without joining channels) ----
-export async function broadcastToRooms(
-  cells: string[],
+export function broadcastToRooms(cells: string[], payload: BurstPayload): Promise<void> {
+  return broadcastToTopics(cells.map(roomTopic), payload);
+}
+
+export async function broadcastToTopics(
+  topics: string[],
   payload: BurstPayload,
 ): Promise<void> {
   const res = await fetch(`${SUPABASE_URL}/realtime/v1/api/broadcast`, {
@@ -590,12 +564,7 @@ export async function broadcastToRooms(
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      messages: cells.map((cell) => ({
-        topic: roomTopic(cell),
-        event: "burst",
-        payload,
-        private: false,
-      })),
+      messages: topics.map((topic) => ({ topic, event: "burst", payload, private: false })),
     }),
   });
   if (!res.ok) {

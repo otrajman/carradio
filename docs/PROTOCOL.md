@@ -290,7 +290,11 @@ machine `VoxDetector` (Kotlin + Swift, identical tests), fed one dBFS level per 
 - Release: 1.1 s below max(floor + 8 dB, −56 dBFS) ends the phrase. < 250 ms of speech →
   discard. Clients write at most 250 ms of the trailing silence.
 - Cap: at 10 s (§4) the snippet is sent and capture continues into a new one.
-- Audio: AAC-LC `.m4a` on both platforms (`audio/mp4`), path `<trip_id>/<message_id>.m4a`.
+- Audio: AAC-LC `.m4a` on both native platforms (`audio/mp4`), path
+  `<trip_id>/<message_id>.m4a`. The web app uploads whatever its MediaRecorder produces —
+  Opus `.webm` (`audio/webm`) on Chrome/Firefox, AAC `.m4a` on Safari — so receivers must
+  play by `audio_path` extension, never assume one container. Web pre-roll is ~600 ms (a
+  DelayNode ahead of the recorder) and the trailing silence ~500 ms.
 - **Half-duplex**: before an incoming burst plays, the receiver lets the rider's current
   phrase finish (≤ 10 s, then it is sent), holds the mic while the pack plays, and reopens
   it ~350 ms after the last burst. A rider never re-transmits a teammate from the speaker.

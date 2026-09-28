@@ -30,12 +30,18 @@ A second app from this codebase: **hands-free group radio for cyclists**, phone 
 - Same backend with no migration: packs ride in the convoy tag under a `pelotoncb:`
   namespace, so Car Radio never hears bikes and vice versa.
 
-| | Android | iOS |
-|---|---|---|
-| Build | flavor `peloton` (`gradle assemblePelotonDebug`, app id `com.pelotoncb.app`) | XcodeGen target/scheme `PelotonCB` (`com.pelotoncb.app`) |
-| App code | `android/app/src/peloton/` | `ios/PelotonCB/` |
-| Shared with Car Radio | `src/main`: protocol core, audio, Supabase I/O, GPS, H3 | `CarRadio/Sources/Core` + `Services` |
-| New shared core | `core/PelotonTag`, `PelotonGeo`, `VoxDetector` (+ `PelotonTest`) | `Core/PelotonTag`, `VoxDetector` (+ `PelotonTests`) |
+| | Web (PWA) | Android | iOS |
+|---|---|---|---|
+| Try it | **<https://car-radio.live/peloton/>** — any phone browser, installable | flavor `peloton` (`gradle assemblePelotonDebug`, app id `com.pelotoncb.app`) | XcodeGen target/scheme `PelotonCB` (`com.pelotoncb.app`) |
+| App code | `pwa/src/peloton/` + `pwa/src/services/{peloton,vox}.ts` | `android/app/src/peloton/` | `ios/PelotonCB/` |
+| Shared with Car Radio | `pwa/src/protocol`, `services/{audio,engine,location,roadGuide}` | `src/main`: protocol core, audio, Supabase I/O, GPS, H3 | `CarRadio/Sources/Core` + `Services` |
+| New shared core | `protocol/peloton.ts` (tags, reach, `VoxDetector`; `peloton.test.ts`) | `core/PelotonTag`, `PelotonGeo`, `VoxDetector` (+ `PelotonTest`) | `Core/PelotonTag`, `VoxDetector` (+ `PelotonTests`) |
+
+The web app is a second Vite page in `pwa/` (`pwa/peloton/index.html`, own manifest + service
+worker under `/peloton/`) deployed by the same Pages workflow. Browser caveats: the mic stops
+when the phone locks or the tab goes to the background (a wake lock keeps the screen on during
+a ride); pre-roll comes from a 0.6 s DelayNode in front of the MediaRecorder rather than PCM
+splicing; snippets are Opus/WebM (Chrome, Firefox) or AAC/MP4 (Safari).
 
 Car Radio's Android-only pieces now live in the `carradio` flavor (`android/app/src/carradio/`);
 its APK/AAB paths moved to `apk/carradio/...` and `bundle/carradioRelease/...` (CI updated).

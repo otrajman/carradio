@@ -1,0 +1,14 @@
+{
+  "name": "PelotonCB",
+  "short_name": "PelotonCB",
+  "description": "Hands-free group ride radio. Join with a code and just talk.",
+  "start_url": "/peloton/",
+  "scope": "/peloton/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#F3F0E8",
+  "theme_color": "#F3F0E8",
+  "icons": [
+    { "src": "/peloton/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}

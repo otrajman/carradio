@@ -96,6 +96,14 @@ export class PlayQueue {
   private currentUtterance: SpeechSynthesisUtterance | null = null;
   private listeners = new Set<QueueListener>();
   maxAgeS = 60;
+  /**
+   * Half-duplex hooks (PROTOCOL §16.4): `beforeTurn` runs once when the queue goes from
+   * idle to playing (the mic yields; may wait for the rider's phrase to finish), and
+   * `afterTurn` once it drains again (the mic reopens).
+   */
+  beforeTurn: (() => Promise<void>) | null = null;
+  afterTurn: (() => void) | null = null;
+  private inTurn = false;
 
   onChange(fn: QueueListener): () => void {
     this.listeners.add(fn);
@@ -144,7 +152,23 @@ export class PlayQueue {
       if (!item.isBreadcrumb && ageS > this.maxAgeS) continue; // stale live burst
       break;
     }
-    if (!item) return;
+    if (!item) {
+      if (this.inTurn) {
+        this.inTurn = false;
+        this.afterTurn?.();
+      }
+      return;
+    }
+    if (!this.inTurn) {
+      this.inTurn = true;
+      if (this.beforeTurn) {
+        try {
+          await this.beforeTurn();
+        } catch {
+          // yield timed out — play anyway
+        }
+      }
+    }
     this.playing = item;
     this.emit();
     try {
