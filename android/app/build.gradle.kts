@@ -6,11 +6,11 @@ plugins {
 
 android {
     namespace = "com.carradio.app"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         minSdk = 29
-        targetSdk = 35
+        targetSdk = 36
         // CI passes the run number so every Play upload has a fresh versionCode.
         versionCode = (System.getenv("VERSION_CODE") ?: "1").toInt()
         versionName = System.getenv("VERSION_NAME") ?: "0.1.0"
