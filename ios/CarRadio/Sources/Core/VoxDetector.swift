@@ -10,8 +10,9 @@ import Foundation
 ///   a pre-roll buffer longer than the attack so the first syllable isn't clipped.
 /// - Release: `hangoverMs` below floor + sustainMargin ends the snippet; snippets with less
 ///   than `minSpeechMs` of speech are discarded (bumps, clicks).
-/// - Snippets are capped at `maxSnippetMs` (the §4 10 s cap): `.split` sends the current
-///   snippet and keeps capturing into a fresh one.
+/// - A phrase is streamed in chunks of `maxSnippetMs`: `.split` sends the current snippet
+///   and keeps capturing into a fresh one, so the pack starts hearing a long phrase ~one
+///   chunk after it began instead of after it ended.
 public final class VoxDetector {
 
     public struct Config {
@@ -21,9 +22,9 @@ public final class VoxDetector {
         public var sustainMarginDb = 8.0
         public var minOnsetDb = -50.0
         public var attackMs = 120
-        public var hangoverMs = 1_100
+        public var hangoverMs = 700
         public var minSpeechMs = 250
-        public var maxSnippetMs = 10_000
+        public var maxSnippetMs = 3_000
 
         public init() {}
     }

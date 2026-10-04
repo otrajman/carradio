@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- TestFlight builds until Apple grants com.apple.developer.carplay-communication:
+	     no CarPlay entitlement, so the App Store provisioning profile can sign the app.
+	     The CarPlay scene in Info.plist simply never launches. CI selects this file via
+	     CODE_SIGN_ENTITLEMENTS; Xcode/local builds keep CarRadio.entitlements. -->
+</dict>
+</plist>

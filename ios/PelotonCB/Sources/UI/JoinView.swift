@@ -6,6 +6,7 @@ import SwiftUI
 struct JoinView: View {
     @EnvironmentObject private var model: PelotonModel
     @AppStorage("last_pack_code") private var code = ""
+    @AppStorage("rider_name") private var name = ""
     @State private var sharing: String?
     @AppStorage(Constants.roadGuideDefaultsKey) private var roadGuide = true
 
@@ -30,7 +31,28 @@ struct JoinView: View {
                     .foregroundStyle(PelotonPalette.muted)
                     .padding(.top, 6)
 
-                Eyebrow(text: "Join a pack").padding(.top, 32)
+                Eyebrow(text: "Your name · optional").padding(.top, 28)
+                TextField(
+                    "",
+                    text: $name,
+                    prompt: Text("Leave blank for a random one").foregroundColor(PelotonPalette.muted)
+                )
+                .font(.system(size: 20, weight: .bold))
+                .multilineTextAlignment(.center)
+                .textInputAutocapitalization(.words)
+                .autocorrectionDisabled()
+                .submitLabel(.done)
+                .onChange(of: name) { newValue in
+                    let clipped = String(newValue.prefix(RiderName.maxLength))
+                    if clipped != newValue { name = clipped }
+                }
+                .foregroundStyle(PelotonPalette.ink)
+                .padding(.vertical, 16)
+                .background(PelotonPalette.surface, in: RoundedRectangle(cornerRadius: 14))
+                .overlay(RoundedRectangle(cornerRadius: 14).stroke(PelotonPalette.line, lineWidth: 2))
+                .padding(.top, 8)
+
+                Eyebrow(text: "Join a pack").padding(.top, 24)
                 TextField("", text: $code, prompt: Text("PACK CODE").foregroundColor(PelotonPalette.line))
                     .font(.system(size: 34, weight: .black, design: .monospaced))
                     .kerning(3)
@@ -84,7 +106,7 @@ struct JoinView: View {
                 }
                 .padding(.vertical, 28)
 
-                Button { model.startRide(code: nil) } label: {
+                Button { model.startRide(code: nil, name: name) } label: {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("RIDE OPEN ROAD")
                             .font(.system(size: 26, weight: .black))
@@ -117,7 +139,7 @@ struct JoinView: View {
                 .overlay(RoundedRectangle(cornerRadius: 14).stroke(PelotonPalette.line, lineWidth: 2))
                 .padding(.top, 20)
 
-                Text("New rider name every ride · voice kept 24 h · no accounts")
+                Text("Voice kept 24 h · no accounts")
                     .font(.system(size: 12))
                     .foregroundStyle(PelotonPalette.muted)
                     .frame(maxWidth: .infinity)
@@ -136,7 +158,7 @@ struct JoinView: View {
     }
 
     private func join() {
-        model.startRide(code: code)
+        model.startRide(code: code, name: name)
     }
 }
 

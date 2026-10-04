@@ -61,6 +61,16 @@ its APK/AAB paths moved to `apk/carradio/...` and `bundle/carradioRelease/...` (
 - **Gate eval with real models**: `GEMINI_API_KEY=... node supabase/functions/road-guide/eval/run-eval.ts`
   (fails on any false accept). Unit tests: `node --test supabase/functions/_shared/*.test.ts`.
 
+## TestFlight
+
+`.github/workflows/testflight.yml` archives and uploads both apps on every `ios/` push once
+the repository variable `TESTFLIGHT_ENABLED=true` and the secrets listed at the top of the
+workflow exist (team id, Apple Distribution .p12 + password, App Store Connect API key).
+Xcode cloud signing creates the provisioning profiles itself. Car Radio is signed with
+`CarRadio-TestFlight.entitlements` (no CarPlay) until Apple grants the
+`carplay-communication` entitlement; then point `CARRADIO_ENTITLEMENTS` at the real file.
+Build number = workflow run number; App Store icons live in each target's `Assets.xcassets`.
+
 ## pelotoncb.com
 
 `peloton-site/` is the PelotonCB landing page + privacy policy (static, `CNAME` included),

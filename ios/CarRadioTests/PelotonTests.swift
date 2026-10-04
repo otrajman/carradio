@@ -119,7 +119,7 @@ final class PelotonTests: XCTestCase {
         f.run(-62, 2_000)
         XCTAssertEqual(f.kinds, [.start, .stopSend])
         XCTAssertEqual(f.events[0].0, 1_120)
-        XCTAssertEqual(f.events[1].0, 3_600)
+        XCTAssertEqual(f.events[1].0, 3_200) // 700 ms hangover
     }
 
     func testSpeechDuringWarmupIsIgnored() {
@@ -156,7 +156,7 @@ final class PelotonTests: XCTestCase {
         XCTAssertFalse(f.vox.capturing)
     }
 
-    func testLongMonologueSplitsAtTheBurstCap() {
+    func testLongMonologueStreamsAsThreeSecondChunks() {
         let f = Feed()
         f.run(-62, 1_000)
         for _ in 0..<(23 * 5) {
@@ -164,7 +164,9 @@ final class PelotonTests: XCTestCase {
             f.run(-60, 40)
         }
         f.run(-62, 2_000)
-        XCTAssertEqual(f.kinds, [.start, .split, .split, .stopSend])
+        // 23 s of speech from t=1 s: a chunk boundary every 3 s (t=4 s … 22 s), then release.
+        XCTAssertEqual(f.kinds, [.start] + Array(repeating: .split, count: 7) + [.stopSend])
+        XCTAssertEqual(f.events[1].0, 4_000)
     }
 
     func testResetAbandonsSnippetButKeepsFloor() {
@@ -190,5 +192,25 @@ final class PelotonTests: XCTestCase {
         silent.withUnsafeBufferPointer { XCTAssertEqual(VoxDetector.levelDbfs($0), VoxDetector.silenceDb) }
         let half = (0..<256).map { $0 % 2 == 0 ? Float(0.5) : Float(-0.5) }
         half.withUnsafeBufferPointer { XCTAssertEqual(VoxDetector.levelDbfs($0), -6.02, accuracy: 0.01) }
+    }
+
+    // MARK: §16.5 rider name
+
+    func testRiderNameKeepsOrdinaryNames() {
+        XCTAssertEqual(RiderName.clean("  Omer  "), "Omer")
+        XCTAssertEqual(RiderName.clean("Jean-Luc O'Neil Jr."), "Jean-Luc O'Neil Jr.")
+        XCTAssertEqual(RiderName.clean("Zoë 2"), "Zoë 2")
+    }
+
+    func testRiderNameStripsMarkupEmojiAndControls() {
+        XCTAssertEqual(RiderName.clean("<b>Sam</b>\n\u{7}"), "b Sam b")
+        XCTAssertEqual(RiderName.clean("\u{1F6B4} Kim"), "Kim")
+    }
+
+    func testRiderNameIsCappedAndNilWhenEmpty() {
+        XCTAssertEqual(RiderName.clean(String(repeating: "A", count: 50)), String(repeating: "A", count: 20))
+        XCTAssertNil(RiderName.clean("   "))
+        XCTAssertNil(RiderName.clean("!!!"))
+        XCTAssertNil(RiderName.clean(nil))
     }
 }

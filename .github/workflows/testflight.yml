@@ -1,0 +1,116 @@
+name: iOS — TestFlight upload
+
+# Signs and uploads both apps to TestFlight. Needs these repository secrets:
+#   APPLE_TEAM_ID            10-char team id (developer.apple.com/account, Membership)
+#   APPLE_CERT_P12_BASE64    Apple Distribution certificate + private key, .p12, base64
+#   APPLE_CERT_PASSWORD      the .p12 export password
+#   ASC_KEY_ID / ASC_ISSUER_ID / ASC_KEY_P8_BASE64
+#                            App Store Connect API key (App Manager role), .p8 base64
+# Provisioning profiles are created/downloaded by Xcode cloud signing via the API key
+# (-allowProvisioningUpdates), so none need to be made by hand.
+# Car Radio is signed WITHOUT the CarPlay entitlement until Apple grants it
+# (CarRadio-TestFlight.entitlements); flip CARRADIO_ENTITLEMENTS below when it lands.
+
+on:
+  push:
+    branches: [main]
+    paths: ["ios/**", ".github/workflows/testflight.yml"]
+  workflow_dispatch:
+
+env:
+  CARRADIO_ENTITLEMENTS: CarRadio/Resources/CarRadio-TestFlight.entitlements
+
+jobs:
+  upload:
+    runs-on: macos-15
+    if: ${{ vars.TESTFLIGHT_ENABLED == 'true' }}
+    defaults:
+      run: { working-directory: ios }
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - scheme: PelotonCB
+            entitlements: ""
+          - scheme: CarRadio
+            entitlements: CarRadio/Resources/CarRadio-TestFlight.entitlements
+    steps:
+      - uses: actions/checkout@v4
+      - run: brew install xcodegen
+      - run: xcodegen generate
+
+      - name: Import signing certificate into a throwaway keychain
+        env:
+          P12_BASE64: ${{ secrets.APPLE_CERT_P12_BASE64 }}
+          P12_PASSWORD: ${{ secrets.APPLE_CERT_PASSWORD }}
+        run: |
+          set -euo pipefail
+          KEYCHAIN=$RUNNER_TEMP/signing.keychain-db
+          KC_PASS=$(uuidgen)
+          echo "$P12_BASE64" | base64 --decode > $RUNNER_TEMP/cert.p12
+          security create-keychain -p "$KC_PASS" "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "$KC_PASS" "$KEYCHAIN"
+          security import $RUNNER_TEMP/cert.p12 -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN"
+          security set-key-partition-list -S apple-tool:,apple: -k "$KC_PASS" "$KEYCHAIN"
+          security list-keychain -d user -s "$KEYCHAIN" login.keychain-db
+          echo "KEYCHAIN=$KEYCHAIN" >> $GITHUB_ENV
+
+      - name: Write App Store Connect API key
+        env:
+          P8_BASE64: ${{ secrets.ASC_KEY_P8_BASE64 }}
+        run: |
+          mkdir -p ~/.private_keys
+          echo "$P8_BASE64" | base64 --decode > ~/.private_keys/AuthKey_${{ secrets.ASC_KEY_ID }}.p8
+          echo "ASC_KEY_PATH=$HOME/.private_keys/AuthKey_${{ secrets.ASC_KEY_ID }}.p8" >> $GITHUB_ENV
+
+      - name: Archive ${{ matrix.scheme }}
+        env:
+          TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -euo pipefail
+          EXTRA=""
+          if [ -n "${{ matrix.entitlements }}" ]; then
+            EXTRA="CODE_SIGN_ENTITLEMENTS=${{ matrix.entitlements }}"
+          fi
+          xcodebuild -project CarRadio.xcodeproj -scheme ${{ matrix.scheme }} \
+            -destination 'generic/platform=iOS' -configuration Release \
+            -archivePath build/${{ matrix.scheme }}.xcarchive archive \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$ASC_KEY_PATH" \
+            -authenticationKeyID "${{ secrets.ASC_KEY_ID }}" \
+            -authenticationKeyIssuerID "${{ secrets.ASC_ISSUER_ID }}" \
+            DEVELOPMENT_TEAM="$TEAM_ID" CODE_SIGN_STYLE=Automatic \
+            CURRENT_PROJECT_VERSION=${{ github.run_number }} \
+            MARKETING_VERSION=0.1.${{ github.run_number }} \
+            $EXTRA | tail -40
+
+      - name: Export + upload to TestFlight
+        env:
+          TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -euo pipefail
+          cat > build/ExportOptions.plist <<PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0"><dict>
+            <key>method</key><string>app-store-connect</string>
+            <key>destination</key><string>upload</string>
+            <key>teamID</key><string>$TEAM_ID</string>
+            <key>signingStyle</key><string>automatic</string>
+            <key>uploadSymbols</key><true/>
+            <key>manageAppVersionAndBuildNumber</key><false/>
+          </dict></plist>
+          PLIST
+          xcodebuild -exportArchive \
+            -archivePath build/${{ matrix.scheme }}.xcarchive \
+            -exportOptionsPlist build/ExportOptions.plist \
+            -exportPath build/export-${{ matrix.scheme }} \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$ASC_KEY_PATH" \
+            -authenticationKeyID "${{ secrets.ASC_KEY_ID }}" \
+            -authenticationKeyIssuerID "${{ secrets.ASC_ISSUER_ID }}" | tail -30
+
+      - name: Clean up keychain
+        if: always()
+        run: security delete-keychain "$KEYCHAIN" || true

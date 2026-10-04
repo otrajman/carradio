@@ -20,6 +20,12 @@ settings:
     SWIFT_VERSION: "5.9"
     IPHONEOS_DEPLOYMENT_TARGET: "16.0"
     ENABLE_USER_SCRIPT_SANDBOXING: NO
+    # Versioning: Info.plists read these; CI overrides CURRENT_PROJECT_VERSION per upload.
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+    # Signing is driven by CI (DEVELOPMENT_TEAM + API key); local builds stay unsigned.
+    CODE_SIGN_STYLE: Automatic
 
 targets:
   CarRadio:
@@ -29,7 +35,7 @@ targets:
       - path: CarRadio
         excludes:
           - "Resources/Info.plist"
-          - "Resources/CarRadio.entitlements"
+          - "Resources/*.entitlements"
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.carradio.app

@@ -57,26 +57,36 @@ final class PelotonModel: ObservableObject {
     private var paused = false
     private var releaseTurnTask: Task<Void, Never>?
     private var syntheticCells: Set<String> = []
+    /// Synthetic scripts already heard — survives leaving and rejoining.
+    private let playedIDs = PlayedIDStore()
+    /// Chunks of a phrase must reach the pack in order: each send awaits the previous one.
+    private var sendTail: Task<Void, Never>?
     private var cancellables: Set<AnyCancellable> = []
 
     private init() {
         location.activityType = .fitness
         nowPlaying.title = "PelotonCB — riding"
+        playback.prefetch = true
+        playback.continuationGap = 2
         wire()
     }
 
     // MARK: Lifecycle
 
-    /// - Parameter code: pack code, or nil for open road.
-    func startRide(code: String?) {
+    /// - Parameters:
+    ///   - code: pack code, or nil for open road.
+    ///   - name: optional §16.5 display name; nil/blank → the generated handle.
+    func startRide(code: String?, name: String? = nil) {
         guard phase != .starting, phase != .riding else { return }
         let tag = PelotonTag.fromCode(code)
         isPack = tag != nil
         packTag = tag ?? PelotonTag.openRoad
         packCode = isPack ? code?.trimmingCharacters(in: .whitespaces).uppercased() : nil
         phase = .starting
+        // The trip row always carries the generated handle; the pack sees the rider's own
+        // name when they gave one.
         let newHandle = HandleGenerator.generate()
-        handle = newHandle
+        handle = RiderName.clean(name) ?? newHandle
         Task {
             do {
                 tripID = try await supabase.createTrip(handle: newHandle)
@@ -103,6 +113,7 @@ final class PelotonModel: ObservableObject {
         location.stop()
         nowPlaying.deactivate()
         playback.stopAll()
+        sendTail = nil
         AudioSessionController.shared.unpinVox()
         tripID = nil
         currentGps = nil
@@ -173,7 +184,7 @@ final class PelotonModel: ObservableObject {
             self.nowPlaying.updateNowPlaying(subtitle: "\(count) riding with you — \(self.handle)")
         }
 
-        vox.onSnippet = { [weak self] url in self?.send(url) }
+        vox.onSnippet = { [weak self] url, whole in self?.send(url, wholePhrase: whole) }
         vox.onMic = { [weak self] m in
             guard let self, !self.paused || m == .paused else { return }
             self.mic = m
@@ -240,7 +251,8 @@ final class PelotonModel: ObservableObject {
     }
 
     /// §12 synthetic nodes (Gemini-voiced alerts + local trivia), once per res-7 cell like
-    /// Car Radio. Played to this rider only; never broadcast to the pack.
+    /// Car Radio. Played to this rider only; never broadcast to the pack. Each script is
+    /// heard once, even across rides.
     private func fetchSystemScriptsIfNewCell(_ fix: GpsState) {
         guard Constants.syntheticNodes,
               let cell = RoomManager.res7Cell(lat: fix.lat, lng: fix.lng),
@@ -248,7 +260,8 @@ final class PelotonModel: ObservableObject {
         Task {
             guard let messages = try? await supabase.fetchSyntheticNodes(lat: fix.lat, lng: fix.lng),
                   phase == .riding else { return }
-            for m in messages {
+            for m in messages where !playedIDs.contains(m.id) {
+                playedIDs.markPlayed(m.id)
                 playback.enqueue(PlaybackQueue.Item(payload: m.asPayload(), isBreadcrumb: true))
             }
         }
@@ -270,12 +283,14 @@ final class PelotonModel: ObservableObject {
         )
         guard result.verdict == .play, !payload.isSystem else { return }
         if !isPack, !PelotonGeo.inRange(sender: payload, receiver: gps) { return }
-        playback.enqueue(PlaybackQueue.Item(payload: payload))
+        var shown = payload
+        shown.handle = RiderName.clean(payload.handle) ?? "Rider"
+        playback.enqueue(PlaybackQueue.Item(payload: shown))
     }
 
     // MARK: Transmit (VOX → PROTOCOL §4)
 
-    private func send(_ url: URL) {
+    private func send(_ url: URL, wholePhrase: Bool) {
         guard let tripID, let gps = currentGps, let room = ownRoom else {
             try? FileManager.default.removeItem(at: url)
             status = "Waiting for GPS — not sent"
@@ -283,7 +298,9 @@ final class PelotonModel: ObservableObject {
         }
         let currentHandle = handle
         let tag = packTag
-        Task {
+        let previous = sendTail
+        sendTail = Task {
+            await previous?.value
             let sent = await sendPipeline.sendBurst(
                 fileURL: url,
                 tripID: tripID,
@@ -291,15 +308,19 @@ final class PelotonModel: ObservableObject {
                 state: gps,
                 convoyTag: tag,
                 publishRooms: [room],
-                playSentCue: false // the rider may already be talking again
+                playSentCue: false, // the rider may already be talking again
+                deliverFirst: true
             )
             try? FileManager.default.removeItem(at: url)
             snippetsSent += 1
             if sent != nil { status = nil }
-            // §17: the gated Road Guide may answer this rider privately.
-            if let sent, Constants.roadGuideEnabled,
-               let answer = await supabase.askRoadGuide(about: sent), phase == .riding {
-                playback.enqueue(PlaybackQueue.Item(payload: answer, isBreadcrumb: true))
+            // §17: the gated Road Guide may answer this rider privately — only for a phrase
+            // that went out whole (a 3 s chunk is not a question), and off the send chain.
+            guard let sent, wholePhrase, Constants.roadGuideEnabled else { return }
+            Task {
+                if let answer = await supabase.askRoadGuide(about: sent), phase == .riding {
+                    playback.enqueue(PlaybackQueue.Item(payload: answer, isBreadcrumb: true))
+                }
             }
         }
     }

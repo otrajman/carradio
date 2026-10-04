@@ -32,7 +32,8 @@ final class SendPipeline {
         state: GpsState,
         convoyTag: String? = nil,
         publishRooms overrideRooms: [String]? = nil,
-        playSentCue: Bool = true
+        playSentCue: Bool = true,
+        deliverFirst: Bool = false
     ) async -> BurstPayload? {
         // 1. Shadowban check FIRST. On RPC failure, assume not banned.
         if await isShadowbanned(tripID: tripID) {
@@ -57,22 +58,6 @@ final class SendPipeline {
             // 2. Upload to storage.
             try await supabase.uploadVoiceBurst(path: bucketPath, data: data)
 
-            // 3. Insert the breadcrumb row.
-            try await supabase.insertMessage(
-                id: messageID,
-                tripID: tripID,
-                kind: "voice",
-                audioPath: audioPath,
-                text: nil,
-                h3R9: h3r9,
-                lat: state.lat,
-                lng: state.lng,
-                heading: state.heading,
-                speed: state.speed,
-                convoyTag: convoyTag
-            )
-
-            // 4. Broadcast to the publish set.
             let payload = BurstPayload(
                 messageID: messageID.uuidString.lowercased(),
                 tripID: tripID.uuidString.lowercased(),
@@ -93,7 +78,33 @@ final class SendPipeline {
                 lat: state.lat, lng: state.lng,
                 heading: state.heading, speed: state.speed
             )
-            await realtime.broadcast(payload, to: rooms)
+
+            // PelotonCB (§16.4): the pack hears it as soon as the audio is up; the row
+            // follows and never delays delivery.
+            if deliverFirst { await realtime.broadcast(payload, to: rooms) }
+
+            // 3. Insert the breadcrumb row.
+            do {
+                try await supabase.insertMessage(
+                    id: messageID,
+                    tripID: tripID,
+                    kind: "voice",
+                    audioPath: audioPath,
+                    text: nil,
+                    h3R9: h3r9,
+                    lat: state.lat,
+                    lng: state.lng,
+                    heading: state.heading,
+                    speed: state.speed,
+                    convoyTag: convoyTag
+                )
+            } catch {
+                guard deliverFirst else { throw error }
+                NSLog("CarRadio message row insert failed: \(error)")
+            }
+
+            // 4. Broadcast to the publish set.
+            if !deliverFirst { await realtime.broadcast(payload, to: rooms) }
 
             guard playSentCue else { return payload }
             AudioSessionController.shared.beginPlayback()

@@ -4,6 +4,8 @@
 // An AVAudioEngine input tap feeds each buffer's level to the shared VoxDetector.
 // Speech opens an AAC .m4a snippet (pre-roll first, so the first syllable survives the
 // detector's attack window); trailing silence is held back and only ~250 ms is written.
+// A phrase longer than one chunk (3 s) goes out as consecutive snippets while the rider is
+// still talking; onSnippet's flag is true only for a phrase that fit in a single snippet.
 // Half-duplex: yieldTurn() lets the current phrase finish, then holds the mic while the
 // pack plays; releaseTurn() reopens it.
 //
@@ -20,7 +22,7 @@ enum PelotonMic: Equatable {
 
 @MainActor
 final class VoxEngine {
-    var onSnippet: ((URL) -> Void)?
+    var onSnippet: ((URL, Bool) -> Void)?
     var onMic: ((PelotonMic) -> Void)?
     var onLevel: ((Float) -> Void)?
 
@@ -35,7 +37,9 @@ final class VoxEngine {
         guard format.sampleRate > 0, format.channelCount > 0 else { return false }
 
         processor.configure(format: format)
-        processor.onSnippet = { [weak self] url in Task { @MainActor in self?.onSnippet?(url) } }
+        processor.onSnippet = { [weak self] url, whole in
+            Task { @MainActor in self?.onSnippet?(url, whole) }
+        }
         processor.onMic = { [weak self] mic in Task { @MainActor in self?.onMic?(mic) } }
         processor.onLevel = { [weak self] v in Task { @MainActor in self?.onLevel?(v) } }
 
@@ -73,7 +77,7 @@ final class VoxEngine {
     }
 
     /// Half-duplex: returns once the mic is quiet (the rider's current phrase, if any,
-    /// finishes and is sent first — bounded by the 10 s cap).
+    /// finishes and is sent first — bounded by a 12 s wait).
     func yieldTurn() async {
         guard isRunning else { return }
         await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
@@ -88,7 +92,7 @@ final class VoxEngine {
 
 /// All audio-side state, confined to one serial queue.
 private final class VoxProcessor: @unchecked Sendable {
-    var onSnippet: ((URL) -> Void)?
+    var onSnippet: ((URL, Bool) -> Void)?
     var onMic: ((PelotonMic) -> Void)?
     var onLevel: ((Float) -> Void)?
 
@@ -103,6 +107,7 @@ private final class VoxProcessor: @unchecked Sendable {
     private var paused = true
     private var held = false
     private var wasHeld = false
+    private var phraseSplit = false
     private var turnWaiters: [() -> Void] = []
     private var turnDeadline: Date?
     private var smoothed: Float = 0
@@ -211,6 +216,7 @@ private final class VoxProcessor: @unchecked Sendable {
 
         switch detector.onFrame(levelDb: level, durationMs: ms) {
         case .start:
+            phraseSplit = false
             openSnippet()
             preroll.forEach(write)
             preroll = []
@@ -243,12 +249,9 @@ private final class VoxProcessor: @unchecked Sendable {
             tail.forEach { write($0.0) }
             tail = []
             write(buffer)
+            phraseSplit = true
             finishSnippet(send: true)
-            if turnWaiters.isEmpty {
-                openSnippet()
-            } else {
-                grantTurn() // someone's waiting: don't start another 10 s
-            }
+            openSnippet() // a waiting pack is bounded by turnDeadline, not by the chunk
         }
     }
 
@@ -307,7 +310,7 @@ private final class VoxProcessor: @unchecked Sendable {
         guard let url = fileURL else { return }
         fileURL = nil
         if send {
-            onSnippet?(url)
+            onSnippet?(url, !phraseSplit)
         } else {
             try? FileManager.default.removeItem(at: url)
         }

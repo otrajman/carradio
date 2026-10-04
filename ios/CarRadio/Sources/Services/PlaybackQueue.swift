@@ -35,6 +35,18 @@ final class PlaybackQueue: NSObject, ObservableObject {
     /// Called after each item finishes (played, skipped, or dropped mid-play).
     var onItemFinished: ((Item) -> Void)?
 
+    /// Start downloading a burst's audio when it is queued instead of when its turn comes
+    /// (PelotonCB chunked phrases).
+    var prefetch = false
+    /// PROTOCOL §16.4: a voice burst from the sender who finished playing less than this
+    /// long ago is the next chunk of the same phrase and plays without an earcon.
+    /// 0 = every burst gets its earcon (Car Radio).
+    var continuationGap: TimeInterval = 0
+
+    private var prefetched: [String: Task<Data?, Never>] = [:]
+    private var lastVoiceTripID: String?
+    private var lastVoiceEndedAt = Date.distantPast
+
     private var queue: [Item] = []
     private var processing = false
     private var currentItem: Item?
@@ -54,6 +66,9 @@ final class PlaybackQueue: NSObject, ObservableObject {
     // MARK: Public
 
     func enqueue(_ item: Item) {
+        if prefetch, let path = item.payload.audioPath, let url = Constants.publicAudioURL(for: path) {
+            prefetched[item.payload.messageID] = Task { await Self.fetch(url) }
+        }
         queue.append(item)
         processIfNeeded()
     }
@@ -79,6 +94,8 @@ final class PlaybackQueue: NSObject, ObservableObject {
     /// Full stop: drops the queue and silences anything in flight (end of trip).
     func stopAll() {
         queue.removeAll()
+        prefetched.values.forEach { $0.cancel() }
+        prefetched.removeAll()
         audioPlayer?.stop()
         synthesizer.stopSpeaking(at: .immediate)
         resumeFinish()
@@ -110,6 +127,7 @@ final class PlaybackQueue: NSObject, ObservableObject {
             if !item.isBreadcrumb {
                 let created = WireDate.date(from: item.payload.createdAt) ?? item.enqueuedAt
                 if Date().timeIntervalSince(created) > Constants.burstMaxAgeSeconds {
+                    prefetched.removeValue(forKey: item.payload.messageID)?.cancel()
                     continue
                 }
             }
@@ -124,7 +142,8 @@ final class PlaybackQueue: NSObject, ObservableObject {
                 await earcons.play(.system) // triple-chime always precedes system playback
             } else if item.isBreadcrumb {
                 await earcons.play(.breadcrumb)
-            } else {
+            } else if item.payload.tripID != lastVoiceTripID
+                        || Date().timeIntervalSince(lastVoiceEndedAt) > continuationGap {
                 await earcons.play(.incoming)
             }
 
@@ -132,10 +151,14 @@ final class PlaybackQueue: NSObject, ObservableObject {
             // voice when present and fall back to on-device TTS of the same text.
             if item.payload.isSystem {
                 var played = false
-                if let path = item.payload.audioPath { played = await playVoice(path: path) }
+                if let path = item.payload.audioPath { played = await playVoice(path: path, item: item) }
                 if !played, let text = item.payload.text { await speak(text: text, item: item) }
             } else if let path = item.payload.audioPath {
-                await playVoice(path: path)
+                await playVoice(path: path, item: item)
+                if !item.isBreadcrumb {
+                    lastVoiceTripID = item.payload.tripID
+                    lastVoiceEndedAt = Date()
+                }
             } else if let text = item.payload.text {
                 await speak(text: text, item: item)
             }
@@ -155,12 +178,16 @@ final class PlaybackQueue: NSObject, ObservableObject {
 
     /// Plays a stored burst. Returns false if it could not be fetched or started.
     @discardableResult
-    private func playVoice(path: String) async -> Bool {
+    private func playVoice(path: String, item: Item) async -> Bool {
         guard let url = Constants.publicAudioURL(for: path) else { return false }
         do {
-            let (data, response) = try await URLSession.shared.data(from: url)
-            if let http = response as? HTTPURLResponse, http.statusCode != 200 {
-                NSLog("CarRadio playback: HTTP \(http.statusCode) for \(path)")
+            var fetched: Data?
+            if let task = prefetched.removeValue(forKey: item.payload.messageID) {
+                fetched = await task.value
+            }
+            if fetched == nil { fetched = await Self.fetch(url) }
+            guard let data = fetched else {
+                NSLog("CarRadio playback: could not fetch \(path)")
                 return false
             }
             let player = try AVAudioPlayer(data: data)
@@ -180,6 +207,12 @@ final class PlaybackQueue: NSObject, ObservableObject {
             NSLog("CarRadio playback failed for \(path): \(error)")
             return false
         }
+    }
+
+    private static func fetch(_ url: URL) async -> Data? {
+        guard let (data, response) = try? await URLSession.shared.data(from: url) else { return nil }
+        if let http = response as? HTTPURLResponse, http.statusCode != 200 { return nil }
+        return data
     }
 
     // MARK: System / text bursts
