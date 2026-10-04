@@ -66,9 +66,9 @@ its APK/AAB paths moved to `apk/carradio/...` and `bundle/carradioRelease/...` (
 `.github/workflows/testflight.yml` archives and uploads both apps on every `ios/` push once
 the repository variable `TESTFLIGHT_ENABLED=true` and the secrets listed at the top of the
 workflow exist (team id, Apple Distribution .p12 + password, App Store Connect API key).
-Xcode cloud signing creates the provisioning profiles itself. Car Radio is signed with
-`CarRadio-TestFlight.entitlements` (no CarPlay) until Apple grants the
-`carplay-communication` entitlement; then point `CARRADIO_ENTITLEMENTS` at the real file.
+Xcode cloud signing creates the provisioning profiles itself. Apple assigned the CarPlay
+Communication capability to `live.car-radio.app`, so Car Radio signs with its real
+entitlements; `CarRadio-TestFlight.entitlements` (no CarPlay) is kept as a fallback.
 Build number = workflow run number; App Store icons live in each target's `Assets.xcassets`.
 iOS bundle ids: `live.car-radio.app` (Apple already had `com.carradio.app` registered to
 someone else; Android keeps `com.carradio.app`) and `com.pelotoncb.app`.

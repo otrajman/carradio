@@ -2,7 +2,7 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<!-- CarPlay communication-app entitlement. Requires Apple approval:
+	<!-- CarPlay communication-app entitlement (granted for live.car-radio.app, 2026-10-03):
 	     https://developer.apple.com/contact/carplay/ — until granted, builds
 	     signed for device must either drop this key or use a provisioning
 	     profile that includes it. See README.md. -->

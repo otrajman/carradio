@@ -2,9 +2,9 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<!-- TestFlight builds until Apple grants com.apple.developer.carplay-communication:
-	     no CarPlay entitlement, so the App Store provisioning profile can sign the app.
-	     The CarPlay scene in Info.plist simply never launches. CI selects this file via
-	     CODE_SIGN_ENTITLEMENTS; Xcode/local builds keep CarRadio.entitlements. -->
+	<!-- Fallback: Car Radio without the CarPlay entitlement, for signing with a profile
+	     that lacks com.apple.developer.carplay-communication (the CarPlay scene in
+	     Info.plist simply never launches). Not used while the App ID has the capability;
+	     select with CODE_SIGN_ENTITLEMENTS in testflight.yml if it is ever needed. -->
 </dict>
 </plist>

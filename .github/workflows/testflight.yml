@@ -8,17 +8,15 @@ name: iOS — TestFlight upload
 #                            App Store Connect API key (App Manager role), .p8 base64
 # Provisioning profiles are created/downloaded by Xcode cloud signing via the API key
 # (-allowProvisioningUpdates), so none need to be made by hand.
-# Car Radio is signed WITHOUT the CarPlay entitlement until Apple grants it
-# (CarRadio-TestFlight.entitlements); flip CARRADIO_ENTITLEMENTS below when it lands.
+# Car Radio signs with its real entitlements (CarPlay communication, granted on the
+# live.car-radio.app App ID 2026-10-03). If Apple ever revokes it, set the CarRadio matrix
+# entry's `entitlements` to CarRadio/Resources/CarRadio-TestFlight.entitlements.
 
 on:
   push:
     branches: [main]
     paths: ["ios/**", ".github/workflows/testflight.yml"]
   workflow_dispatch:
-
-env:
-  CARRADIO_ENTITLEMENTS: CarRadio/Resources/CarRadio-TestFlight.entitlements
 
 jobs:
   upload:
@@ -33,7 +31,7 @@ jobs:
           - scheme: PelotonCB
             entitlements: ""
           - scheme: CarRadio
-            entitlements: CarRadio/Resources/CarRadio-TestFlight.entitlements
+            entitlements: ""  # project default: CarRadio.entitlements (CarPlay)
     steps:
       - uses: actions/checkout@v4
       - run: brew install xcodegen
