@@ -1,0 +1,17 @@
+name: Play — inspect tracks (read-only)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: npm i --no-save google-auth-library@9 >/dev/null
+      - name: Internal track state + testers
+        env:
+          PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+        run: node .github/scripts/play-inspect.mjs com.pelotoncb.app com.carradio.app
