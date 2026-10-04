@@ -33,6 +33,10 @@
 		<string>audio</string>
 		<string>location</string>
 	</array>
+	<!-- The shared Services code links the Speech framework (Car Radio's wake word);
+	     PelotonCB never starts a recognizer, but App Store validation requires the string. -->
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>PelotonCB does not use speech recognition; this permission is never requested.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>PelotonCB keeps the microphone open during a ride and sends what you say to your pack in short snippets, until you pause it.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
