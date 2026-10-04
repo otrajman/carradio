@@ -38,7 +38,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: brew install xcodegen
-      - run: xcodegen generate
 
       - name: Import signing certificate into a throwaway keychain
         env:
@@ -67,16 +66,16 @@ jobs:
           UUID=$(security cms -D -i $RUNNER_TEMP/profile.mobileprovision | plutil -extract UUID raw -)
           cp $RUNNER_TEMP/profile.mobileprovision ~/Library/MobileDevice/Provisioning\ Profiles/$UUID.mobileprovision
           echo "profile $UUID installed"
-          ENT=""
           if [ "${{ matrix.scheme }}" = "CarRadio" ]; then
             if security cms -D -i $RUNNER_TEMP/profile.mobileprovision | grep -q carplay-communication; then
               echo "profile carries the CarPlay entitlement"
             else
               echo "profile has NO CarPlay entitlement: signing with the CarPlay-free fallback"
-              ENT="CODE_SIGN_ENTITLEMENTS=CarRadio/Resources/CarRadio-TestFlight.entitlements"
+              sed -i '' 's|CODE_SIGN_ENTITLEMENTS: CarRadio/Resources/CarRadio.entitlements|CODE_SIGN_ENTITLEMENTS: CarRadio/Resources/CarRadio-TestFlight.entitlements|' project.yml
             fi
           fi
-          echo "ENTITLEMENTS_OVERRIDE=$ENT" >> $GITHUB_ENV
+
+      - run: xcodegen generate
 
       - name: Write App Store Connect API key
         env:
@@ -91,15 +90,13 @@ jobs:
           TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           set -euo pipefail
+          # Signing settings are on the app targets in project.yml (package targets must
+          # not see them); only the version numbers are passed here.
           xcodebuild -project CarRadio.xcodeproj -scheme ${{ matrix.scheme }} \
             -destination 'generic/platform=iOS' -configuration Release \
             -archivePath build/${{ matrix.scheme }}.xcarchive archive \
-            DEVELOPMENT_TEAM="$TEAM_ID" CODE_SIGN_STYLE=Manual \
-            CODE_SIGN_IDENTITY="Apple Distribution" \
-            PROVISIONING_PROFILE_SPECIFIER="${{ matrix.profile_name }}" \
             CURRENT_PROJECT_VERSION=${{ github.run_number }} \
-            MARKETING_VERSION=0.1.${{ github.run_number }} \
-            $ENTITLEMENTS_OVERRIDE | tail -40
+            MARKETING_VERSION=0.1.${{ github.run_number }} | tail -40
 
       - name: Export + upload to TestFlight
         env:
