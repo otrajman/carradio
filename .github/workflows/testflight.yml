@@ -21,7 +21,8 @@ on:
 
 jobs:
   upload:
-    runs-on: macos-15
+    # App Store Connect requires the iOS 26 SDK (Xcode 26); macos-26 images default to it.
+    runs-on: macos-26
     if: ${{ vars.TESTFLIGHT_ENABLED == 'true' }}
     defaults:
       run: { working-directory: ios }
@@ -37,6 +38,7 @@ jobs:
             profile_name: CarRadio Live AppStore
     steps:
       - uses: actions/checkout@v4
+      - run: xcodebuild -version
       - run: brew install xcodegen
 
       - name: Import signing certificate into a throwaway keychain
