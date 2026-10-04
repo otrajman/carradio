@@ -70,6 +70,8 @@ Xcode cloud signing creates the provisioning profiles itself. Car Radio is signe
 `CarRadio-TestFlight.entitlements` (no CarPlay) until Apple grants the
 `carplay-communication` entitlement; then point `CARRADIO_ENTITLEMENTS` at the real file.
 Build number = workflow run number; App Store icons live in each target's `Assets.xcassets`.
+iOS bundle ids: `live.car-radio.app` (Apple already had `com.carradio.app` registered to
+someone else; Android keeps `com.carradio.app`) and `com.pelotoncb.app`.
 
 ## pelotoncb.com
 

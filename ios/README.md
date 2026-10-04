@@ -4,7 +4,7 @@ Native SwiftUI client for the Car Radio spatial walkie-talkie. Implements
 `docs/PROTOCOL.md` v1 exactly (rooms, filter math, earcons, breadcrumbs,
 elastic mode) against the shared Supabase backend.
 
-- Swift 5.9+, SwiftUI, iOS 16 minimum, bundle id `com.carradio.app`
+- Swift 5.9+, SwiftUI, iOS 16 minimum, bundle id `live.car-radio.app` (Android keeps `com.carradio.app`; Apple had the com.* id taken)
 - Supabase via [supabase-swift](https://github.com/supabase/supabase-swift) v2
   (PostgREST, Storage, Functions, Realtime V2 broadcast + presence)
 - H3 spatial indexing via a **built-in pure-Swift port** (`H3Lite.swift`) — no

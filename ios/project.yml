@@ -4,7 +4,7 @@
 name: CarRadio
 
 options:
-  bundleIdPrefix: com.carradio
+  bundleIdPrefix: live.car-radio
   deploymentTarget:
     iOS: "16.0"
   createIntermediateGroups: true
@@ -38,7 +38,7 @@ targets:
           - "Resources/*.entitlements"
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.carradio.app
+        PRODUCT_BUNDLE_IDENTIFIER: live.car-radio.app
         PRODUCT_NAME: CarRadio
         INFOPLIST_FILE: CarRadio/Resources/Info.plist
         CODE_SIGN_ENTITLEMENTS: CarRadio/Resources/CarRadio.entitlements
