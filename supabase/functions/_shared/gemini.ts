@@ -147,9 +147,9 @@ function isWav(bytes: Uint8Array): boolean {
  * Single-speaker TTS → WAV bytes. 3.8 TTS models return a complete WAV by default; older
  * ones return raw 24 kHz L16 — both handled.
  *
- * `style` is a natural-language delivery instruction ("calm, unhurried", "quickly and
- * energetically"); it goes in the prompt the documented way ("Say <style>: <text>"), which
- * the model follows far more reliably than the speech_metadata hint (kept for older models).
+ * `style` is a natural-language delivery hint passed as speech_metadata. Do NOT prefix the
+ * text with "Say <style>:" — gemini-3.8-flash-lite-tts reads the instruction aloud
+ * (measured 2026-10-03: a 23-word answer became 14.7 s of speech).
  */
 export async function synthesizeSpeech(
   text: string,
@@ -158,7 +158,7 @@ export async function synthesizeSpeech(
   timeoutMs = 20_000,
 ): Promise<Uint8Array | null> {
   const res = await post(MODELS.tts, {
-    contents: [{ role: "user", parts: [{ text: `Say ${style}: ${text}`, speech_metadata: { style } }] }],
+    contents: [{ role: "user", parts: [{ text, speech_metadata: { style } }] }],
     generationConfig: {
       responseModalities: ["AUDIO"],
       speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: voice } } },

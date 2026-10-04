@@ -63,7 +63,7 @@ const supabase = createClient(
 
 const HANDLE = "Road Guide";
 const ENGINE = Deno.env.get("ROAD_GUIDE_ENGINE") === "live" ? "live" : "tts";
-const GUIDE_STYLE = "quickly and energetically, like an upbeat tour guide calling out sights over the wind, no pauses between sentences";
+const GUIDE_STYLE = "upbeat tour guide; brisk, no long pauses";
 const MAX_MESSAGE_AGE_MS = 2 * 60_000;
 const MAX_AUDIO_BYTES = 262_144;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
