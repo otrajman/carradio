@@ -546,7 +546,7 @@ class RadioService : Service() {
         )
 
         return NotificationCompat.Builder(this, CarRadioApp.CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_launcher_radio)
+            .setSmallIcon(R.drawable.ic_stat)
             .setContentTitle(getString(R.string.notification_title))
             .setContentText(handle.ifBlank { getString(R.string.app_name) })
             .setContentIntent(contentIntent)

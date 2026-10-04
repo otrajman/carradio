@@ -493,7 +493,7 @@ class PelotonService : Service() {
         val riders = PelotonState.riderCount.value
         val where = PelotonState.packCode.value?.let { "Pack $it" } ?: "Open road"
         return NotificationCompat.Builder(this, CarRadioApp.CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_launcher_peloton)
+            .setSmallIcon(R.drawable.ic_stat)
             .setContentTitle(
                 if (paused) getString(R.string.notification_title_paused)
                 else getString(R.string.notification_title)

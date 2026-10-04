@@ -8,9 +8,8 @@
 
     <!-- Phone only: no Android Auto. -->
     <application
-        android:icon="@drawable/ic_launcher_peloton"
         android:theme="@style/Theme.Peloton"
-        tools:replace="android:icon,android:theme">
+        tools:replace="android:theme">
 
         <activity
             android:name=".peloton.PelotonActivity"
