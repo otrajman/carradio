@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { ROAD_GUIDE, roadGuideEnabled, setRoadGuideEnabled } from "../config";
 import { generateHandle } from "../protocol/handles";
-import { generatePackCode, packTagFromCode } from "../protocol/peloton";
+import { cleanRiderName, generatePackCode, packTagFromCode, RIDER_NAME_MAX } from "../protocol/peloton";
 import { unlockAudio } from "../services/audio";
 import { GeoProvider } from "../services/location";
 import { registerMediaSession } from "../services/mediaSession";
@@ -18,7 +18,7 @@ export default function PelotonApp() {
   const [error, setError] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
 
-  const start = async (code: string | null) => {
+  const start = async (code: string | null, name: string | null) => {
     unlockAudio(); // inside the tap gesture
     setError(null);
     setStarting(true);
@@ -30,6 +30,7 @@ export default function PelotonApp() {
         generateHandle(),
         tag,
         tag ? code!.trim().toUpperCase() : null,
+        name,
       );
       await e.start();
       setEngine(e);
@@ -46,7 +47,7 @@ export default function PelotonApp() {
   };
 
   if (engine) return <RideScreen engine={engine} onLeave={leave} />;
-  return <JoinScreen onJoin={(c) => void start(c)} busy={starting} error={error} />;
+  return <JoinScreen onJoin={(c, n) => void start(c, n)} busy={starting} error={error} />;
 }
 
 function friendly(e: unknown): string {
@@ -59,8 +60,10 @@ function friendly(e: unknown): string {
 
 // ---- join --------------------------------------------------------------------------------
 
+const NAME_KEY = "peloton_rider_name";
+
 function JoinScreen(props: {
-  onJoin: (code: string | null) => void;
+  onJoin: (code: string | null, name: string | null) => void;
   busy: boolean;
   error: string | null;
 }) {
@@ -71,8 +74,26 @@ function JoinScreen(props: {
       return "";
     }
   });
+  const [name, setName] = useState(() => {
+    try {
+      return localStorage.getItem(NAME_KEY) ?? "";
+    } catch {
+      return "";
+    }
+  });
   const [roadGuide, setRoadGuide] = useState(roadGuideEnabled);
   const supported = VoxRecorder.supported();
+
+  const join = (packCode: string | null) => {
+    const clean = cleanRiderName(name);
+    try {
+      if (clean) localStorage.setItem(NAME_KEY, clean);
+      else localStorage.removeItem(NAME_KEY);
+    } catch {
+      // private mode: the name just isn't remembered
+    }
+    props.onJoin(packCode, clean);
+  };
 
   const mint = async () => {
     const c = generatePackCode();
@@ -92,6 +113,23 @@ function JoinScreen(props: {
         <br />
         The <em>pack</em> hears you.
       </h1>
+
+      <label className="pl-eyebrow" htmlFor="rider-name">
+        Your name · optional
+      </label>
+      <input
+        id="rider-name"
+        className="pl-name-input"
+        type="text"
+        autoComplete="nickname"
+        autoCapitalize="words"
+        autoCorrect="off"
+        spellCheck={false}
+        maxLength={RIDER_NAME_MAX}
+        placeholder="Leave blank for a random one"
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+      />
 
       <label className="pl-eyebrow" htmlFor="pack-code">
         Pack code
@@ -116,7 +154,7 @@ function JoinScreen(props: {
       <button
         className="pl-btn pl-btn-primary pl-btn-big"
         disabled={props.busy || !supported}
-        onClick={() => props.onJoin(code)}
+        onClick={() => join(code)}
       >
         {props.busy ? "JOINING…" : "JOIN PACK"}
       </button>
@@ -124,7 +162,7 @@ function JoinScreen(props: {
       <button
         className="pl-btn pl-btn-ink pl-btn-big"
         disabled={props.busy || !supported}
-        onClick={() => props.onJoin(null)}
+        onClick={() => join(null)}
       >
         RIDE OPEN ROAD
       </button>

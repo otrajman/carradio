@@ -275,7 +275,9 @@ Run §5.1–§5.3 (self, dedupe, mute) and the §14 tag rule with `convoyTag = p
   `headingDot(S, R) ≥ 0.5` (±60° — switchbacks match, an oncoming group doesn't).
   Symmetric: riders behind you count (no forward cone).
 
-§5.6 queueing / 60 s age drop apply unchanged. No breadcrumbs or synthetic nodes.
+§5.6 queueing / 60 s age drop apply unchanged. No breadcrumbs. AI audio (§12 synthetic
+nodes, §17 Road Guide) is governed by §16.6.
+Received `handle`s are passed through the §16.5 cleaner before display.
 
 ### 16.4 Voice-activated transmit (VOX)
 
@@ -287,20 +289,58 @@ machine `VoxDetector` (Kotlin + Swift, identical tests), fed one dBFS level per 
   noise; speech's inter-word dips keep it from tracking the voice). 600 ms warmup.
 - Onset: level ≥ max(floor + 14 dB, −50 dBFS) for 120 ms. Clients keep a 400 ms pre-roll
   and write it first so the first syllable isn't clipped.
-- Release: 1.1 s below max(floor + 8 dB, −56 dBFS) ends the phrase. < 250 ms of speech →
+- Release: 700 ms below max(floor + 8 dB, −56 dBFS) ends the phrase. < 250 ms of speech →
   discard. Clients write at most 250 ms of the trailing silence.
-- Cap: at 10 s (§4) the snippet is sent and capture continues into a new one.
+- **Chunked phrases**: every 3 s of a phrase still in progress the snippet is sent and
+  capture continues into a new one, so the pack starts hearing a long phrase ~4 s after it
+  began instead of after it ended (store-and-forward of whole 10 s phrases put 20–30 s
+  between question and answer). Chunks are ordinary bursts — no new wire field.
+  - Sender: sends are **serialized** (chunks arrive in order) and the order within a send is
+    upload → **broadcast** → `messages` insert, so the row never delays delivery.
+    The Road Guide (§17) is asked only about a phrase that went out as a single snippet.
+  - Receiver: start downloading a burst's audio when it is queued, not when its turn comes.
+    A voice burst from the sender whose previous burst finished playing ≤ 2 s ago is a
+    continuation: play it with **no earcon**.
 - Audio: AAC-LC `.m4a` on both native platforms (`audio/mp4`), path
   `<trip_id>/<message_id>.m4a`. The web app uploads whatever its MediaRecorder produces —
   Opus `.webm` (`audio/webm`) on Chrome/Firefox, AAC `.m4a` on Safari — so receivers must
   play by `audio_path` extension, never assume one container. Web pre-roll is ~600 ms (a
-  DelayNode ahead of the recorder) and the trailing silence ~500 ms.
+  DelayNode ahead of the recorder) and the trailing silence ~100 ms.
 - **Half-duplex**: before an incoming burst plays, the receiver lets the rider's current
-  phrase finish (≤ 10 s, then it is sent), holds the mic while the pack plays, and reopens
+  phrase finish — the whole phrase, not just the current chunk, bounded at ~10–12 s, after
+  which what was captured is sent — holds the mic while the pack plays, and reopens
   it ~350 ms after the last burst. A rider never re-transmits a teammate from the speaker.
 - No "sent" earcon (it would land in the next phrase); `micOpen` plays on resume *before*
   the mic reopens, `muted` on pause.
 - Media buttons: Play/Pause → pause/resume transmit, Next → skip + stealth mute (§8).
+
+### 16.5 Rider name (optional)
+
+The join screen has an optional name field, remembered on the device. Cleaner (identical on
+all platforms: `cleanRiderName` / `RiderName.clean`): replace everything except Unicode
+letters, digits, space and `. ' -` with a space, collapse whitespace, trim, clip to 20
+characters; empty → no name. A name replaces the generated handle **on the wire only** —
+the `handle` of burst and presence payloads. `trips.phonetic_handle` always keeps the
+generated "Adjective Animal" handle (§1; the insert policy enforces that shape), so
+moderation keys on the trip, never on the typed name. Receivers run the same cleaner over
+every incoming `handle` before showing it (fallback "Rider").
+
+### 16.6 AI fills silences, never talks over people
+
+Both AI voices are private to the rider and yield to the pack:
+
+- **Local comments** (§12 synthetic nodes; native apps only): fetched once per res-7 cell
+  but *not played on arrival*. They wait in a pending list (≤ 3, oldest dropped) and one is
+  played only after **30 s of silence** — nothing playing, the rider not on air, and no
+  burst sent, received or finished in that time. Playing one restarts the clock. Each
+  script is heard **once ever**: its id goes into the persistent played-ids set (§6) when
+  it starts, so leaving and rejoining never repeats it.
+- **Road Guide** (§17) is a fallback answer. The request goes out as before, but when
+  presence shows other riders the client holds the answer until **8 s** after the question
+  was sent, and drops it if any pack burst passed the receive filter in the meantime
+  (someone replied). Riding alone, it plays as soon as it arrives.
+- **People outrank the AI**: a pack burst that passes the filter while a `kind=system`
+  item is playing cuts that item off, then plays.
 
 ## 17. Road Guide (gated Gemini voice, Car Radio + PelotonCB)
 
@@ -320,7 +360,8 @@ After a successful §4 send (never for shadowbanned pretend-sends), if the switc
 On `respond: true`, enqueue a **local-only** `kind=system` burst (`trip_id: "road-guide"`,
 age-exempt, triple-chime, plays `audio_path` with `text` TTS fallback). It is never
 broadcast, never a breadcrumb, and cannot be muted or reported (it's the traveler's own
-request). In PelotonCB it goes through the half-duplex turn like any burst.
+request). In PelotonCB it goes through the half-duplex turn like any burst, and only as
+a fallback when the pack doesn't reply (§16.6).
 
 ### 17.2 Verification gate (server; every layer fails closed)
 

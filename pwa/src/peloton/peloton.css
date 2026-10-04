@@ -89,6 +89,13 @@ a { color: inherit; }
 }
 .pl-code-input:focus { border-color: var(--ink); }
 .pl-code-input::placeholder { color: var(--line); text-transform: none; letter-spacing: 0.02em; }
+.pl-name-input {
+  width: 100%; min-height: 52px; padding: 0 14px; border-radius: 14px;
+  border: 2px solid var(--line); background: var(--surface); color: var(--ink);
+  font-weight: 800; font-size: 18px; text-align: center; outline: none;
+}
+.pl-name-input:focus { border-color: var(--ink); }
+.pl-name-input::placeholder { color: var(--muted); font-weight: 600; font-size: 15px; }
 .pl-or { font-size: 13px; font-weight: 800; letter-spacing: 0.2em; color: var(--muted); }
 .pl-toggle {
   display: flex; gap: 12px; align-items: flex-start; text-align: left; width: 100%;

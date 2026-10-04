@@ -54,6 +54,24 @@ export function generatePackCode(rand: () => number = Math.random): string {
   return `${word}-${1000 + Math.floor(rand() * 9000)}`;
 }
 
+// ---- §16.5 rider name ------------------------------------------------------------------
+
+export const RIDER_NAME_MAX = 20;
+
+/**
+ * Optional display name a rider types on the join screen; also applied to every received
+ * handle. Letters, digits, spaces and . ' - only, whitespace collapsed, ≤ 20 chars.
+ * Null when nothing usable is left (the generated handle is used instead).
+ */
+export function cleanRiderName(raw: string | null | undefined): string | null {
+  const cleaned = (raw ?? "")
+    .replace(/[^\p{L}\p{N} .'-]/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  const clipped = [...cleaned].slice(0, RIDER_NAME_MAX).join("").trim();
+  return clipped.length > 0 ? clipped : null;
+}
+
 // ---- §16.3 open-road reach ---------------------------------------------------------------
 
 export const PACK_RADIUS_M = 500;
@@ -98,9 +116,9 @@ export const VOX_DEFAULTS: VoxConfig = {
   sustainMarginDb: 8,
   minOnsetDb: -50,
   attackMs: 120,
-  hangoverMs: 1_100,
+  hangoverMs: 700,
   minSpeechMs: 250,
-  maxSnippetMs: 10_000,
+  maxSnippetMs: 3_000,
 };
 
 export type VoxEvent =
@@ -111,7 +129,7 @@ export type VoxEvent =
   | "stop-send"
   /** Snippet ended without enough speech: throw it away. */
   | "stop-discard"
-  /** Hit the length cap mid-speech: send this snippet, keep capturing into a new one. */
+  /** Chunk boundary mid-speech: send this snippet now, keep capturing into a new one. */
   | "split";
 
 export const SILENCE_DB = -100;

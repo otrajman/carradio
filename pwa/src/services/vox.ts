@@ -4,8 +4,8 @@
 // Pre-roll without splicing containers: the recorder listens to the mic through a
 // DelayNode, so when the detector fires "start" the recorder's first samples are already
 // PRE_ROLL_S in the past — the first syllable (spoken during the attack window) survives.
-// The same delay means a snippet stopped at release carries hangover − delay of trailing
-// silence (~0.5 s) instead of the full 1.1 s.
+// The same delay means a snippet stopped at release carries only hangover − delay (~0.1 s)
+// of trailing silence, and consecutive chunks of one phrase join without a gap.
 //
 // Half-duplex: `yieldTurn()` lets the current phrase finish (bounded), then holds the mic
 // while the pack plays; `releaseTurn()` reopens it. Frames are not fed to the detector while
@@ -15,7 +15,8 @@ import { levelDbfs, VoxDetector, type VoxEvent } from "../protocol/peloton";
 export type MicState = "off" | "listening" | "on-air" | "yielding" | "paused";
 
 export interface VoxCallbacks {
-  onSnippet: (blob: Blob) => void;
+  /** `whole` is false when the phrase was streamed as several chunks (this is one of them). */
+  onSnippet: (blob: Blob, whole: boolean) => void;
   onMic: (state: MicState) => void;
   /** 0..1 meter for the dial, ~10 Hz. */
   onLevel: (level: number) => void;
@@ -36,6 +37,7 @@ export class VoxRecorder {
   private mime = "";
   private detector = new VoxDetector();
   private held = false;
+  private phraseSplit = false;
   private turnWaiters: (() => void)[] = [];
   private lastLevelPost = 0;
   private running = false;
@@ -155,6 +157,7 @@ export class VoxRecorder {
   private handle(ev: VoxEvent) {
     switch (ev) {
       case "start":
+        this.phraseSplit = false;
         this.beginSnippet();
         break;
       case "stop-send":
@@ -166,6 +169,7 @@ export class VoxRecorder {
         this.wakeWaiters();
         break;
       case "split":
+        this.phraseSplit = true;
         this.finishSnippet(true);
         this.beginSnippet();
         break;
@@ -205,8 +209,9 @@ export class VoxRecorder {
     const chunks = this.chunksOf.get(rec) ?? [];
     this.chunksOf.delete(rec);
     const type = rec.mimeType || this.mime || "audio/webm";
+    const whole = !this.phraseSplit;
     rec.onstop = () => {
-      if (send && chunks.length) this.cb.onSnippet(new Blob(chunks, { type }));
+      if (send && chunks.length) this.cb.onSnippet(new Blob(chunks, { type }), whole);
     };
     if (rec.state !== "inactive") rec.stop();
   }

@@ -80,6 +80,8 @@ export interface QueueItem {
   isBreadcrumb: boolean;
   /** deterministic per-sender voice variation for TTS bursts */
   voiceSeed: number;
+  /** Set by the queue when `prefetch` is on: the audio, already loading. */
+  preloaded?: HTMLAudioElement;
 }
 
 type QueueListener = (nowPlaying: QueueItem | null) => void;
@@ -104,6 +106,15 @@ export class PlayQueue {
   beforeTurn: (() => Promise<void>) | null = null;
   afterTurn: (() => void) | null = null;
   private inTurn = false;
+  /** Start downloading a burst's audio when it is queued instead of when its turn comes. */
+  prefetch = false;
+  /**
+   * PROTOCOL §16.4 chunked phrases: a voice burst from the sender who finished playing less
+   * than this long ago is the next chunk of the same phrase and plays without an earcon.
+   * 0 = every burst gets its earcon (Car Radio).
+   */
+  continuationGapMs = 0;
+  private lastFinishedAt = 0;
 
   onChange(fn: QueueListener): () => void {
     this.listeners.add(fn);
@@ -122,8 +133,20 @@ export class PlayQueue {
   }
 
   enqueue(item: QueueItem) {
+    if (this.prefetch && item.audioPath) {
+      const a = new Audio(publicAudioUrl(item.audioPath));
+      a.preload = "auto";
+      a.load();
+      item.preloaded = a;
+    }
     this.q.push(item);
     void this.pump();
+  }
+
+  /** Drop everything queued and silence the current burst (leaving a ride). */
+  clear() {
+    this.q = [];
+    this.stopCurrent();
   }
 
   stopCurrent(): QueueItem | null {
@@ -171,18 +194,28 @@ export class PlayQueue {
     }
     this.playing = item;
     this.emit();
+    const continuation =
+      item.kind === "voice" &&
+      !item.isBreadcrumb &&
+      this.lastFinished?.kind === "voice" &&
+      this.lastFinished.tripId === item.tripId &&
+      Date.now() - this.lastFinishedAt <= this.continuationGapMs;
     try {
-      if (item.kind === "system") earcons.system();
-      else earcons[item.isBreadcrumb ? "breadcrumb" : "incoming"]();
-      await sleep(item.kind === "system" ? 550 : 180);
-      if (this.playing !== item) return; // skipped during earcon
-      if (item.audioPath) await this.playUrl(publicAudioUrl(item.audioPath));
+      if (!continuation) {
+        if (item.kind === "system") earcons.system();
+        else earcons[item.isBreadcrumb ? "breadcrumb" : "incoming"]();
+        await sleep(item.kind === "system" ? 550 : 180);
+        if (this.playing !== item) return; // skipped during earcon
+      }
+      if (item.audioPath) await this.playUrl(publicAudioUrl(item.audioPath), item.preloaded);
       else if (item.text) await this.speak(item);
     } catch {
       // unplayable burst — move on
     }
+    item.preloaded = undefined;
     if (this.playing === item) {
       this.lastFinished = item;
+      this.lastFinishedAt = Date.now();
       this.playing = null;
       this.emit();
     }
@@ -196,9 +229,9 @@ export class PlayQueue {
     }
   }
 
-  private playUrl(url: string): Promise<void> {
+  private playUrl(url: string, preloaded?: HTMLAudioElement): Promise<void> {
     return new Promise((resolve, reject) => {
-      const a = new Audio(url);
+      const a = preloaded ?? new Audio(url);
       this.currentAudio = a;
       a.onended = () => {
         this.currentAudio = null;

@@ -40,6 +40,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.launch
 import com.carradio.app.CarRadioApp
 import com.carradio.app.core.PelotonTag
+import com.carradio.app.core.RiderName
 import com.carradio.app.peloton.ui.BigButton
 import com.carradio.app.peloton.ui.JoinScreen
 import com.carradio.app.peloton.ui.Peloton
@@ -86,6 +87,14 @@ private fun PelotonRoot() {
     val roadGuide by settings.roadGuideEnabled.collectAsStateWithLifecycle(initialValue = true)
     val scope = rememberCoroutineScope()
     var code by rememberSaveable { mutableStateOf(prefs.getString(KEY_LAST_CODE, "") ?: "") }
+    var name by rememberSaveable { mutableStateOf(prefs.getString(KEY_RIDER_NAME, "") ?: "") }
+
+    /** Remembers the typed name for next time; null when the rider left it blank. */
+    fun riderName(): String? {
+        val clean = RiderName.clean(name)
+        prefs.edit().putString(KEY_RIDER_NAME, clean ?: "").apply()
+        return clean
+    }
 
     // Handlebar mount: the screen stays on for the whole ride.
     val view = LocalView.current
@@ -119,14 +128,16 @@ private fun PelotonRoot() {
             onJoinPack = {
                 if (PelotonTag.fromCode(code) != null) {
                     prefs.edit().putString(KEY_LAST_CODE, code).apply()
-                    PelotonService.start(context, code)
+                    PelotonService.start(context, code, riderName())
                 }
             },
             onNewPack = {
                 code = PelotonTag.generateCode()
                 share(code)
             },
-            onRideOpen = { PelotonService.start(context, null) },
+            onRideOpen = { PelotonService.start(context, null, riderName()) },
+            name = name,
+            onNameChange = { name = it },
             roadGuide = roadGuide,
             onRoadGuideChange = { scope.launch { settings.setRoadGuideEnabled(it) } }
         )
@@ -166,3 +177,4 @@ private fun PermissionGate(onRequest: () -> Unit) {
 }
 
 private const val KEY_LAST_CODE = "last_pack_code"
+private const val KEY_RIDER_NAME = "rider_name"

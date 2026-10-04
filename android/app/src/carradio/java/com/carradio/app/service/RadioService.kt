@@ -482,7 +482,12 @@ class RadioService : Service() {
         if (!syntheticCalledCells.add(cell)) return // at most once per res-7 cell per session
         scope.launch {
             val scripts = repository.fetchSyntheticScripts(fix.lat, fix.lng)
+            // Heard once: the played-ids set survives a restart (same store as §6 breadcrumbs).
+            val heard = settings.loadPlayedBreadcrumbIds()
             for (script in scripts) {
+                val key = script.id ?: "script:${script.text.hashCode()}"
+                if (key in heard) continue
+                settings.addPlayedBreadcrumbId(key)
                 playbackQueue.enqueue(
                     PlaybackQueue.QueuedBurst(
                         payload = script.toPayload(fix.lat, fix.lng, "System", "synthetic-node"),

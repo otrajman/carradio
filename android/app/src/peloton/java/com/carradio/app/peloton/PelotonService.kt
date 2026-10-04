@@ -31,6 +31,7 @@ import com.carradio.app.core.BurstPayload
 import com.carradio.app.core.HandleGenerator
 import com.carradio.app.core.PelotonGeo
 import com.carradio.app.core.PelotonTag
+import com.carradio.app.core.RiderName
 import com.carradio.app.data.Repository
 import com.carradio.app.data.SettingsStore
 import com.carradio.app.data.SupabaseClientProvider
@@ -48,6 +49,8 @@ import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
 import java.time.Instant
@@ -80,7 +83,11 @@ class PelotonService : Service() {
     private var locationEngine: LocationEngine? = null
 
     private var tripId: String? = null
+    /** What the pack sees: the rider's own name (§16.5) when given, else the trip handle. */
     private var handle: String = ""
+    private var riderName: String? = null
+    /** Chunks of a phrase must reach the pack in order: one send at a time. */
+    private val sendMutex = Mutex()
     private var packTag: String = PelotonTag.OPEN_ROAD
     private var isPack = false
     private var lastFix: LocationEngine.Fix? = null
@@ -90,6 +97,14 @@ class PelotonService : Service() {
     private var routedToHeadset = false
     @Volatile private var roadGuideEnabled = true
     private val syntheticCalledCells = mutableSetOf<String>()
+
+    // AI stays out of the way of people (PROTOCOL §16.6): local comments wait here for a
+    // lull, and a Road Guide answer waits to see whether the pack replies first.
+    private val pendingComments = ArrayDeque<Repository.SystemScript>()
+    /** Last time anyone — the pack, this rider, or the AI — was heard or on air. */
+    private var lastActivityMs = 0L
+    /** Last time a pack burst passed the receive filter. */
+    private var lastIncomingMs = 0L
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -119,6 +134,7 @@ class PelotonService : Service() {
                 val tag = PelotonTag.fromCode(code)
                 isPack = tag != null
                 packTag = tag ?: PelotonTag.OPEN_ROAD
+                riderName = RiderName.clean(intent?.getStringExtra(EXTRA_RIDER_NAME))
                 goForeground()
                 boot(displayCode = if (isPack) code?.trim()?.uppercase() else null)
             }
@@ -158,8 +174,13 @@ class PelotonService : Service() {
 
         vox = VoxRecorder(
             context = this,
-            onSnippet = { file -> scope.launch { sendSnippet(file) } },
-            onMic = { mic -> if (!paused) PelotonState.mic.value = mic },
+            onSnippet = { file, whole ->
+                scope.launch { sendMutex.withLock { sendSnippet(file, whole) } }
+            },
+            onMic = { mic ->
+                if (mic == PelotonState.Mic.ON_AIR) lastActivityMs = System.currentTimeMillis()
+                if (!paused) PelotonState.mic.value = mic
+            },
             onLevel = { PelotonState.micLevel.value = it }
         )
 
@@ -177,6 +198,7 @@ class PelotonService : Service() {
                 PelotonState.isPlaying.value = false
                 PelotonState.speakerHandle.value = null
                 PelotonState.lastSpeakerHandle.value = payload.handle
+                lastActivityMs = System.currentTimeMillis()
                 // Give the speaker's tail a moment to die out before reopening the mic;
                 // the next queued burst cancels this and keeps the mic yielded.
                 releaseTurnJob?.cancel()
@@ -188,7 +210,9 @@ class PelotonService : Service() {
             awaitTurn = {
                 releaseTurnJob?.cancel()
                 vox?.yieldTurn()
-            }
+            },
+            prefetchDir = File(cacheDir, "rx"),
+            continuationGapMs = CONTINUATION_GAP_MS
         )
 
         createMediaSession(exo)
@@ -196,6 +220,14 @@ class PelotonService : Service() {
         settings.roadGuideEnabled
             .onEach { roadGuideEnabled = it }
             .launchIn(scope)
+
+        lastActivityMs = System.currentTimeMillis()
+        scope.launch {
+            while (isActive) {
+                delay(SILENCE_POLL_MS)
+                fillSilence()
+            }
+        }
 
         scope.launch {
             ensureTrip()
@@ -221,8 +253,8 @@ class PelotonService : Service() {
         val now = System.currentTimeMillis()
         if (stored != null && now - stored.createdAtMs < Constants.TRIP_IDLE_TIMEOUT_MS) {
             tripId = stored.tripId
-            handle = stored.handle
-            PelotonState.handle.value = stored.handle
+            handle = riderName ?: stored.handle
+            PelotonState.handle.value = handle
             return
         }
         val newHandle = HandleGenerator.generate()
@@ -230,9 +262,9 @@ class PelotonService : Service() {
             try {
                 val row = repository.createTrip(newHandle)
                 tripId = row.id
-                handle = row.phoneticHandle
+                handle = riderName ?: row.phoneticHandle
                 settings.saveTrip(SettingsStore.StoredTrip(row.id, row.phoneticHandle, now))
-                PelotonState.handle.value = row.phoneticHandle
+                PelotonState.handle.value = handle
             } catch (e: Exception) {
                 Log.w(TAG, "trip create failed; retrying", e)
                 PelotonState.statusMessage.value = "Offline — retrying connection"
@@ -257,26 +289,55 @@ class PelotonService : Service() {
     }
 
     /**
-     * PROTOCOL §12 synthetic nodes (Gemini-voiced weather alerts + local trivia), once per
-     * res-7 cell like Car Radio. Played to this rider only; never broadcast to the pack.
+     * PROTOCOL §12 synthetic nodes (Gemini-voiced weather alerts + local trivia), fetched
+     * once per res-7 cell like Car Radio — but only queued here. [fillSilence] plays one when
+     * the ride has gone quiet; each script is heard once ever (persistent played-ids set).
      */
     private fun fetchSystemScripts(fix: LocationEngine.Fix) {
         scope.launch {
+            val heard = settings.loadPlayedBreadcrumbIds()
             for (script in repository.fetchSyntheticScripts(fix.lat, fix.lng)) {
-                playbackQueue?.enqueue(
-                    PlaybackQueue.QueuedBurst(
-                        payload = script.toPayload(fix.lat, fix.lng, "System", "synthetic-node"),
-                        isBreadcrumb = true // age-exempt
-                    )
-                )
+                val key = scriptKey(script)
+                if (key in heard || pendingComments.any { scriptKey(it) == key }) continue
+                pendingComments.addLast(script)
+                while (pendingComments.size > MAX_PENDING_COMMENTS) pendingComments.removeFirst()
             }
         }
     }
 
-    /** PROTOCOL §17: gated Road Guide answer to what this rider just said (private). */
+    private fun scriptKey(script: Repository.SystemScript): String =
+        script.id ?: "script:${script.text.hashCode()}"
+
+    /** §16.6: one local comment after [SILENCE_FILL_MS] with nobody talking or playing. */
+    private suspend fun fillSilence() {
+        val fix = lastFix ?: return
+        if (pendingComments.isEmpty()) return
+        if (PelotonState.isPlaying.value || PelotonState.mic.value == PelotonState.Mic.ON_AIR) return
+        if (System.currentTimeMillis() - lastActivityMs < SILENCE_FILL_MS) return
+        val script = pendingComments.removeFirst()
+        lastActivityMs = System.currentTimeMillis()
+        settings.addPlayedBreadcrumbId(scriptKey(script))
+        playbackQueue?.enqueue(
+            PlaybackQueue.QueuedBurst(
+                payload = script.toPayload(fix.lat, fix.lng, "System", "synthetic-node"),
+                isBreadcrumb = true // age-exempt
+            )
+        )
+    }
+
+    /**
+     * PROTOCOL §17: gated Road Guide answer to what this rider just said (private). With
+     * other riders around it is a fallback (§16.6): the pack gets [REPLY_WAIT_MS] to answer
+     * first, and the AI answer is dropped if anyone did.
+     */
     private fun askRoadGuide(sent: BurstPayload) {
         scope.launch {
+            val askedAt = System.currentTimeMillis()
             val answer = repository.askRoadGuide(sent) ?: return@launch
+            if (PelotonState.riderCount.value > 0) {
+                delay((askedAt + REPLY_WAIT_MS - System.currentTimeMillis()).coerceAtLeast(0))
+            }
+            if (lastIncomingMs > askedAt) return@launch // a rider replied
             val fix = lastFix ?: return@launch
             playbackQueue?.enqueue(
                 PlaybackQueue.QueuedBurst(
@@ -307,7 +368,12 @@ class PelotonService : Service() {
         if (!isPack &&
             !PelotonGeo.inRange(payload.lat, payload.lng, payload.heading, payload.speed, receiver)
         ) return
-        playbackQueue?.enqueue(PlaybackQueue.QueuedBurst(payload))
+        lastIncomingMs = System.currentTimeMillis()
+        lastActivityMs = lastIncomingMs
+        // §16.6: people outrank the AI — a live burst cuts off a comment or guide answer.
+        if (playbackQueue?.currentPayload?.isSystem == true) playbackQueue?.skipCurrent()
+        val shown = payload.copy(handle = RiderName.clean(payload.handle) ?: "Rider")
+        playbackQueue?.enqueue(PlaybackQueue.QueuedBurst(shown))
     }
 
     // --- Transmit (VOX → PROTOCOL §4 pipeline) -------------------------------------------
@@ -337,7 +403,7 @@ class PelotonService : Service() {
         }
     }
 
-    private suspend fun sendSnippet(file: File) {
+    private suspend fun sendSnippet(file: File, wholePhrase: Boolean) {
         val trip = tripId
         val fix = lastFix
         if (trip == null || fix == null) {
@@ -368,13 +434,22 @@ class PelotonService : Service() {
                 createdAt = Instant.now().toString(),
                 convoy = packTag
             )
-            repository.insertMessage(payload)
+            // The pack hears it as soon as the audio is up; the row (moderation, Road Guide)
+            // follows and never delays delivery.
             channels?.broadcast(payload)
             // No "sent" earcon: in VOX the rider may already be talking again, and the cue
             // would land in their next snippet. The UI counter confirms instead.
             PelotonState.snippetsSent.value += 1
             PelotonState.statusMessage.value = null
-            if (roadGuideEnabled) askRoadGuide(payload)
+            lastActivityMs = System.currentTimeMillis()
+            try {
+                repository.insertMessage(payload)
+            } catch (e: Exception) {
+                Log.w(TAG, "message row insert failed", e)
+                return
+            }
+            // §17: only a phrase that went out whole — a 3 s chunk is not a question.
+            if (wholePhrase && roadGuideEnabled) askRoadGuide(payload)
         } catch (e: Exception) {
             Log.e(TAG, "send failed", e)
             PelotonState.statusMessage.value = "Send failed — check connection"
@@ -536,20 +611,33 @@ class PelotonService : Service() {
         private const val TAG = "PelotonService"
         private const val NOTIFICATION_ID = 42
         private const val TURN_RELEASE_DELAY_MS = 350L
+        /** A chunk of the same phrase follows within this long of the previous one ending. */
+        private const val CONTINUATION_GAP_MS = 2_000L
+        /** §16.6: quiet time before a local AI comment may fill the silence. */
+        private const val SILENCE_FILL_MS = 30_000L
+        private const val SILENCE_POLL_MS = 2_000L
+        private const val MAX_PENDING_COMMENTS = 3
+        /** §16.6: how long the pack gets to answer before the Road Guide does. */
+        private const val REPLY_WAIT_MS = 8_000L
         private const val ROAD_GUIDE_HANDLE = "Road Guide"
         private const val ROAD_GUIDE_TRIP = "road-guide"
 
         const val EXTRA_PACK_CODE = "com.pelotoncb.extra.PACK_CODE"
+        const val EXTRA_RIDER_NAME = "com.pelotoncb.extra.RIDER_NAME"
         const val ACTION_TOGGLE_PAUSE = "com.pelotoncb.action.TOGGLE_PAUSE"
         const val ACTION_SKIP_MUTE = "com.pelotoncb.action.SKIP_MUTE"
         const val ACTION_REPORT = "com.pelotoncb.action.REPORT"
         const val ACTION_LEAVE = "com.pelotoncb.action.LEAVE"
 
-        /** @param packCode null / blank → open-road mode. */
-        fun start(context: Context, packCode: String?) {
+        /**
+         * @param packCode null / blank → open-road mode.
+         * @param riderName optional display name; null / blank → the generated handle.
+         */
+        fun start(context: Context, packCode: String?, riderName: String? = null) {
             context.startForegroundService(
                 Intent(context, PelotonService::class.java)
                     .putExtra(EXTRA_PACK_CODE, packCode)
+                    .putExtra(EXTRA_RIDER_NAME, riderName)
             )
         }
 

@@ -5,6 +5,7 @@ import { evaluateBurst } from "./filter";
 import { destination } from "./geo";
 import {
   OPEN_ROAD_TAG,
+  cleanRiderName,
   VoxDetector,
   type VoxEvent,
   generatePackCode,
@@ -128,7 +129,7 @@ describe("VoxDetector", () => {
     f.run(-62, 2_000);
     expect(f.kinds()).toEqual(["start", "stop-send"]);
     expect(f.events[0].t).toBe(1_120); // after the 120 ms attack
-    expect(f.events[1].t).toBe(2_500 + 1_100); // after the 1.1 s hangover
+    expect(f.events[1].t).toBe(2_500 + 700); // after the 700 ms hangover
   });
 
   it("ignores speech during warmup", () => {
@@ -166,7 +167,7 @@ describe("VoxDetector", () => {
     expect(f.vox.capturing).toBe(false);
   });
 
-  it("splits a long monologue at the burst cap", () => {
+  it("streams a long monologue as 3 s chunks", () => {
     const f = new Feed();
     f.run(-62, 1_000);
     for (let i = 0; i < 23 * 5; i++) {
@@ -174,7 +175,9 @@ describe("VoxDetector", () => {
       f.run(-60, 40);
     }
     f.run(-62, 2_000);
-    expect(f.kinds()).toEqual(["start", "split", "split", "stop-send"]);
+    // 23 s of speech from t=1 s: a chunk boundary every 3 s (t=4 s … 22 s), then release.
+    expect(f.kinds()).toEqual(["start", ...Array(7).fill("split"), "stop-send"]);
+    expect(f.events[1].t).toBe(4_000);
   });
 
   it("reset abandons the snippet but keeps the floor", () => {
@@ -201,5 +204,23 @@ describe("VoxDetector", () => {
     expect(levelDbfs(full)).toBeCloseTo(0, 2);
     const half = Float32Array.from({ length: 320 }, (_, i) => (i % 2 === 0 ? 0.5 : -0.5));
     expect(levelDbfs(half)).toBeCloseTo(-6.02, 2);
+  });
+});
+
+describe("cleanRiderName", () => {
+  it("keeps ordinary names and trims the rest", () => {
+    expect(cleanRiderName("  Omer  ")).toBe("Omer");
+    expect(cleanRiderName("Jean-Luc O'Neil Jr.")).toBe("Jean-Luc O'Neil Jr.");
+    expect(cleanRiderName("Zoë 2")).toBe("Zoë 2");
+  });
+  it("strips markup, emoji and control characters", () => {
+    expect(cleanRiderName("<b>Sam</b>\n\u0007")).toBe("b Sam b");
+    expect(cleanRiderName("🚴 Kim")).toBe("Kim");
+  });
+  it("caps the length and returns null when nothing is left", () => {
+    expect(cleanRiderName("A".repeat(50))).toBe("A".repeat(20));
+    expect(cleanRiderName("   ")).toBeNull();
+    expect(cleanRiderName("!!!")).toBeNull();
+    expect(cleanRiderName(null)).toBeNull();
   });
 });

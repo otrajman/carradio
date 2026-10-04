@@ -18,7 +18,9 @@ import java.io.File
 
 /**
  * PROTOCOL §16 voice-activated transmit. While running, the mic is open and every spoken
- * phrase becomes one snippet (≤ 10 s) delivered to [onSnippet] — no button presses.
+ * phrase is delivered to [onSnippet] — no button presses. A phrase longer than one chunk
+ * (3 s) goes out as consecutive snippets while the rider is still talking; the flag is true
+ * only for a phrase that fit in a single snippet.
  *
  * - `AudioRecord` with the VOICE_COMMUNICATION source: the platform's echo canceller and
  *   noise suppressor are exactly what wind + an open speaker on the bars need.
@@ -32,7 +34,7 @@ import java.io.File
  */
 class VoxRecorder(
     private val context: Context,
-    private val onSnippet: (File) -> Unit,
+    private val onSnippet: (file: File, wholePhrase: Boolean) -> Unit,
     private val onMic: (PelotonState.Mic) -> Unit,
     private val onLevel: (Float) -> Unit
 ) {
@@ -102,7 +104,7 @@ class VoxRecorder(
 
     /**
      * Half-duplex: suspend until the mic is quiet. If the rider is mid-phrase, the phrase
-     * finishes (and is sent) first — bounded by the 10 s snippet cap.
+     * finishes (and is sent) first — bounded by [MAX_PHRASE_MS].
      */
     suspend fun yieldTurn() {
         if (!isRunning || held) return
@@ -128,6 +130,8 @@ class VoxRecorder(
         val tail = ArrayList<ShortArray>()
         var writer: AacSnippetWriter? = null
         var wasHeld = false
+        var phraseSplit = false
+        var phraseMs = 0
         var lastLevelPostMs = 0L
         var smoothed = 0f
 
@@ -145,7 +149,8 @@ class VoxRecorder(
         fun finishAndSend() {
             val file = writer?.finish()
             writer = null
-            if (file != null) post { onSnippet(file) }
+            val whole = !phraseSplit
+            if (file != null) post { onSnippet(file, whole) }
         }
 
         fun grantTurn() {
@@ -177,6 +182,11 @@ class VoxRecorder(
 
                 if (turnRequested && !detector.capturing) grantTurn()
                 if (held) {
+                    // The yield wait timed out mid-phrase: send what was captured.
+                    if (writer != null) {
+                        tail.clear()
+                        finishAndSend()
+                    }
                     wasHeld = true
                     continue
                 }
@@ -192,8 +202,12 @@ class VoxRecorder(
                 preroll.addLast(chunk)
                 while (preroll.size > PREROLL_FRAMES) preroll.removeFirst()
 
-                when (detector.onFrame(level, n * 1000 / SAMPLE_RATE)) {
+                val frameMs = n * 1000 / SAMPLE_RATE
+                if (detector.capturing) phraseMs += frameMs
+                when (detector.onFrame(level, frameMs)) {
                     VoxDetector.Event.START -> {
+                        phraseSplit = false
+                        phraseMs = 0
                         writer = openWriter()
                         preroll.forEach { writer?.write(it) }
                         preroll.clear()
@@ -225,9 +239,10 @@ class VoxRecorder(
                         tail.forEach { writer?.write(it) }
                         tail.clear()
                         writer?.write(chunk)
+                        phraseSplit = true
                         finishAndSend()
-                        if (turnRequested) {
-                            grantTurn() // someone's waiting: don't start another 10 s
+                        if (turnRequested && phraseMs >= MAX_PHRASE_MS) {
+                            grantTurn() // the pack has waited long enough for this phrase
                         } else {
                             writer = openWriter()
                         }
@@ -278,6 +293,8 @@ class VoxRecorder(
         private const val TAIL_KEEP_FRAMES = 250 / FRAME_MS
         private const val LEVEL_POST_MS = 100L
         private const val STOP_JOIN_MS = 600L
+        /** A phrase the pack is waiting behind is cut at the first chunk boundary past this. */
+        private const val MAX_PHRASE_MS = 9_000
         private const val MAX_YIELD_WAIT_MS = 12_000L
     }
 }

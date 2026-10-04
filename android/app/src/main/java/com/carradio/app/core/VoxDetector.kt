@@ -15,8 +15,9 @@ import kotlin.math.sqrt
  *   first syllable isn't clipped.
  * - Release: [Config.hangoverMs] below floor + [Config.sustainMarginDb] ends the snippet;
  *   snippets with less than [Config.minSpeechMs] of speech are discarded (bumps, clicks).
- * - Snippets are capped at [Config.maxSnippetMs] (the §4 10 s burst cap): the detector
- *   emits [Event.SPLIT] and keeps capturing into a fresh snippet.
+ * - A phrase is streamed in chunks of [Config.maxSnippetMs]: the detector emits
+ *   [Event.SPLIT] and keeps capturing into a fresh snippet, so the pack starts hearing a
+ *   long phrase ~one chunk after it began instead of after it ended.
  */
 class VoxDetector(private val config: Config = Config()) {
 
@@ -27,9 +28,9 @@ class VoxDetector(private val config: Config = Config()) {
         val sustainMarginDb: Double = 8.0,
         val minOnsetDb: Double = -50.0,
         val attackMs: Int = 120,
-        val hangoverMs: Int = 1_100,
+        val hangoverMs: Int = 700,
         val minSpeechMs: Int = 250,
-        val maxSnippetMs: Int = 10_000
+        val maxSnippetMs: Int = 3_000
     )
 
     enum class Event {
@@ -40,7 +41,7 @@ class VoxDetector(private val config: Config = Config()) {
         STOP_SEND,
         /** Snippet ended without enough speech: throw it away. */
         STOP_DISCARD,
-        /** Hit the length cap mid-speech: send this snippet, keep capturing into a new one. */
+        /** Chunk boundary mid-speech: send this snippet now, keep capturing into a new one. */
         SPLIT
     }
 

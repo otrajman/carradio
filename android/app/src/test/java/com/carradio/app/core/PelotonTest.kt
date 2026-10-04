@@ -119,9 +119,9 @@ class PelotonTest {
         f.run(-24.0, 1_500)
         f.run(-62.0, 2_000)
         assertEquals(listOf(VoxDetector.Event.START, VoxDetector.Event.STOP_SEND), f.kinds())
-        // Onset after the 120 ms attack; release after the 1.1 s hangover.
+        // Onset after the 120 ms attack; release after the 700 ms hangover.
         assertEquals(1_120, f.events[0].first)
-        assertEquals(2_500 + 1_100, f.events[1].first)
+        assertEquals(2_500 + 700, f.events[1].first)
     }
 
     @Test
@@ -167,7 +167,7 @@ class PelotonTest {
     }
 
     @Test
-    fun longMonologueSplitsAtTheBurstCap() {
+    fun longMonologueStreamsAsThreeSecondChunks() {
         val f = Feed()
         f.run(-62.0, 1_000)
         // Talking with natural inter-word dips for 23 s.
@@ -176,15 +176,14 @@ class PelotonTest {
             f.run(-60.0, 40)
         }
         f.run(-62.0, 2_000)
+        // 23 s of speech from t=1 s: a chunk boundary every 3 s (t=4 s … 22 s), then release.
         assertEquals(
-            listOf(
-                VoxDetector.Event.START,
-                VoxDetector.Event.SPLIT,
-                VoxDetector.Event.SPLIT,
-                VoxDetector.Event.STOP_SEND
-            ),
+            listOf(VoxDetector.Event.START) +
+                List(7) { VoxDetector.Event.SPLIT } +
+                VoxDetector.Event.STOP_SEND,
             f.kinds()
         )
+        assertEquals(4_000, f.events[1].first)
     }
 
     @Test
@@ -215,5 +214,28 @@ class PelotonTest {
         assertEquals(0.0, VoxDetector.levelDbfs(full), 0.01)
         val half = ShortArray(320) { if (it % 2 == 0) 16384 else -16384 }
         assertEquals(-6.02, VoxDetector.levelDbfs(half), 0.01)
+    }
+
+    // --- §16.5 rider name ---------------------------------------------------------------
+
+    @Test
+    fun riderNameKeepsOrdinaryNames() {
+        assertEquals("Omer", RiderName.clean("  Omer  "))
+        assertEquals("Jean-Luc O'Neil Jr.", RiderName.clean("Jean-Luc O'Neil Jr."))
+        assertEquals("Zoë 2", RiderName.clean("Zoë 2"))
+    }
+
+    @Test
+    fun riderNameStripsMarkupEmojiAndControls() {
+        assertEquals("b Sam b", RiderName.clean("<b>Sam</b>\n\u0007"))
+        assertEquals("Kim", RiderName.clean("\uD83D\uDEB4 Kim"))
+    }
+
+    @Test
+    fun riderNameIsCappedAndNullWhenEmpty() {
+        assertEquals("A".repeat(20), RiderName.clean("A".repeat(50)))
+        assertEquals(null, RiderName.clean("   "))
+        assertEquals(null, RiderName.clean("!!!"))
+        assertEquals(null, RiderName.clean(null))
     }
 }

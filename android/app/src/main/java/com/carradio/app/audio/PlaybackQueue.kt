@@ -1,5 +1,6 @@
 package com.carradio.app.audio
 
+import android.net.Uri
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
@@ -10,13 +11,20 @@ import androidx.media3.exoplayer.ExoPlayer
 import com.carradio.app.Constants
 import com.carradio.app.core.BurstPayload
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.async
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeoutOrNull
+import java.io.File
+import java.net.URL
 import java.time.Instant
+import java.util.UUID
 import kotlin.coroutines.resume
 
 /**
@@ -36,7 +44,17 @@ class PlaybackQueue(
      * Suspends until the speaker may sound. Car Radio plays immediately; PelotonCB's
      * half-duplex VOX (PROTOCOL §16) waits here for the rider's open snippet to finish.
      */
-    private val awaitTurn: suspend () -> Unit = {}
+    private val awaitTurn: suspend () -> Unit = {},
+    /**
+     * When set, a burst's audio is downloaded here as soon as it is queued and played from
+     * the file, so its turn starts without a network round trip (PelotonCB chunked phrases).
+     */
+    private val prefetchDir: File? = null,
+    /**
+     * PROTOCOL §16.4: a voice burst from the sender who finished playing less than this long
+     * ago is the next chunk of the same phrase and plays without an earcon. 0 = always cue.
+     */
+    private val continuationGapMs: Long = 0
 ) {
 
     data class QueuedBurst(
@@ -60,11 +78,16 @@ class PlaybackQueue(
 
     private var currentJob: Job? = null
 
+    private val prefetched = HashMap<String, Deferred<File?>>() // main thread only
+    private var lastVoiceTripId: String? = null
+    private var lastVoiceEndedAtMs = 0L
+
     init {
         scope.launch {
             for (item in channel) {
                 awaitTurn()
                 if (!item.isBreadcrumb && burstAgeMs(item) > Constants.LIVE_BURST_MAX_AGE_MS) {
+                    prefetched.remove(item.payload.messageId)?.let { discard(it) }
                     continue
                 }
                 val job = launch { playItem(item) }
@@ -80,7 +103,46 @@ class PlaybackQueue(
     }
 
     fun enqueue(item: QueuedBurst) {
+        val path = item.payload.audioPath
+        if (prefetchDir != null && !path.isNullOrEmpty()) {
+            prefetched[item.payload.messageId] =
+                scope.async(Dispatchers.IO) { download(Constants.publicAudioUrl(path), prefetchDir) }
+        }
         channel.trySend(item)
+    }
+
+    private fun download(url: String, dir: File): File? {
+        val file = File(dir, "rx_${UUID.randomUUID()}")
+        return try {
+            dir.mkdirs()
+            URL(url).openStream().use { input -> file.outputStream().use { input.copyTo(it) } }
+            file
+        } catch (e: Exception) {
+            Log.w(TAG, "prefetch failed", e)
+            file.delete()
+            null
+        }
+    }
+
+    private fun discard(download: Deferred<File?>) {
+        scope.launch(Dispatchers.IO + NonCancellable) {
+            try {
+                download.await()?.delete()
+            } catch (_: Exception) {
+            }
+        }
+    }
+
+    /** The burst's audio: the prefetched file when it is ready in time, else the URL. */
+    private suspend fun playVoice(payload: BurstPayload, path: String): Boolean {
+        val download = prefetched.remove(payload.messageId)
+            ?: return playUrl(Constants.publicAudioUrl(path))
+        val local = withTimeoutOrNull(PREFETCH_WAIT_MS) { download.await() }
+        return try {
+            playUrl(local?.let { Uri.fromFile(it).toString() } ?: Constants.publicAudioUrl(path))
+        } finally {
+            discard(download)
+        }
     }
 
     /** Stops the burst in flight. Returns its payload (for stealth-mute), or null if idle. */
@@ -107,7 +169,7 @@ class PlaybackQueue(
                 earcons.system() // triple-chime always precedes system playback
                 // §12: server-rendered AI voice when present; on-device TTS of the same text
                 // if there is no audio or it fails to play.
-                val played = payload.audioPath?.let { playUrl(Constants.publicAudioUrl(it)) } ?: false
+                val played = payload.audioPath?.let { playVoice(payload, it) } ?: false
                 if (!played) {
                     val text = payload.text ?: return
                     tts.speak((item.speakPrefix ?: "") + text)
@@ -117,8 +179,13 @@ class PlaybackQueue(
                 earcons.system()
                 tts.speak((item.speakPrefix ?: "") + text)
             } else {
-                if (item.isBreadcrumb) earcons.breadcrumb() else earcons.incoming()
-                playUrl(Constants.publicAudioUrl(payload.audioPath))
+                val continuation = !item.isBreadcrumb &&
+                    payload.tripId == lastVoiceTripId &&
+                    System.currentTimeMillis() - lastVoiceEndedAtMs <= continuationGapMs
+                if (item.isBreadcrumb) earcons.breadcrumb() else if (!continuation) earcons.incoming()
+                playVoice(payload, payload.audioPath)
+                lastVoiceTripId = payload.tripId
+                lastVoiceEndedAtMs = System.currentTimeMillis()
             }
             lastPlayed = payload
         } catch (e: CancellationException) {
@@ -177,5 +244,6 @@ class PlaybackQueue(
     companion object {
         private const val TAG = "PlaybackQueue"
         private const val PLAYBACK_TIMEOUT_MS = 45_000L
+        private const val PREFETCH_WAIT_MS = 4_000L
     }
 }

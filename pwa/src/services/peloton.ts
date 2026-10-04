@@ -7,7 +7,14 @@ import { gridDisk, latLngToCell } from "h3-js";
 import { BUCKET, roadGuideEnabled } from "../config";
 import { BURST_MAX_AGE_S, PRESENCE_INTERVAL_MS, SHADOWBAN_CACHE_MS } from "../protocol/constants";
 import { evaluateBurst } from "../protocol/filter";
-import { GEO_RES, geoChannel, OPEN_ROAD_TAG, packChannel, packInRange } from "../protocol/peloton";
+import {
+  cleanRiderName,
+  GEO_RES,
+  geoChannel,
+  OPEN_ROAD_TAG,
+  packChannel,
+  packInRange,
+} from "../protocol/peloton";
 import type { BurstPayload, GpsFix } from "../protocol/types";
 import { earcons, PlayQueue, voiceSeedOf } from "./audio";
 import { broadcastToTopics } from "./engine";
@@ -37,6 +44,10 @@ export interface PelotonSnapshot {
 type Listener = () => void;
 
 const TURN_RELEASE_DELAY_MS = 350;
+/** A chunk of the same phrase follows within this long of the previous one ending. */
+const CONTINUATION_GAP_MS = 2_000;
+/** §16.6: how long the pack gets to answer before the Road Guide does. */
+const REPLY_WAIT_MS = 8_000;
 
 export class PelotonEngine {
   readonly queue = new PlayQueue();
@@ -65,17 +76,29 @@ export class PelotonEngine {
   private shadowbanned = false;
   private shadowbanCheckedAt = 0;
   private sendChain: Promise<void> = Promise.resolve();
+  /** Last time a pack burst passed the receive filter. */
+  private lastIncomingAt = 0;
 
   private vox: VoxRecorder;
 
-  /** `packTag` null = open road (fixed OPEN_ROAD_TAG on the wire). */
+  /** What the pack sees: the rider's own name when they gave one, else the trip handle. */
+  private handle: string;
+
+  /**
+   * `packTag` null = open road (fixed OPEN_ROAD_TAG on the wire). `riderName` is the
+   * optional §16.5 display name; the trip row always carries the generated `tripHandle`.
+   */
   constructor(
     private provider: LocationProvider,
-    private handle: string,
+    private tripHandle: string,
     private packTag: string | null,
     private packCode: string | null,
+    riderName: string | null = null,
   ) {
+    this.handle = cleanRiderName(riderName) ?? tripHandle;
     this.queue.maxAgeS = BURST_MAX_AGE_S;
+    this.queue.prefetch = true;
+    this.queue.continuationGapMs = CONTINUATION_GAP_MS;
     this.queue.beforeTurn = () => {
       if (this.releaseTimer) clearTimeout(this.releaseTimer);
       this.releaseTimer = null;
@@ -94,7 +117,7 @@ export class PelotonEngine {
       this.publish();
     });
     this.vox = new VoxRecorder({
-      onSnippet: (blob) => this.enqueueSend(blob),
+      onSnippet: (blob, whole) => this.enqueueSend(blob, whole),
       onMic: (m) => {
         this.micState = this.paused ? "paused" : m;
         this.publish();
@@ -151,7 +174,7 @@ export class PelotonEngine {
     if (this.started) return;
     const { data, error } = await supabase
       .from("trips")
-      .insert({ phonetic_handle: this.handle })
+      .insert({ phonetic_handle: this.tripHandle })
       .select("id")
       .single();
     if (error) throw new Error(`trip create failed: ${error.message}`);
@@ -171,7 +194,9 @@ export class PelotonEngine {
     this.vox.stop();
     for (const ch of this.channels.values()) void supabase.removeChannel(ch);
     this.channels.clear();
-    this.queue.stopCurrent();
+    this.queue.clear();
+    if (this.releaseTimer) clearTimeout(this.releaseTimer);
+    this.releaseTimer = null;
     this.publish();
   }
 
@@ -293,10 +318,13 @@ export class PelotonEngine {
     this.markSeen(p.message_id);
     if (reason !== "play" || p.kind === "system") return;
     if (!this.isPack && !packInRange(p, receiver)) return;
+    this.lastIncomingAt = Date.now();
+    // §16.6: people outrank the AI — a live burst cuts off a Road Guide answer.
+    if (this.queue.nowPlaying?.kind === "system") this.queue.stopCurrent();
     this.queue.enqueue({
       messageId: p.message_id,
       tripId: p.trip_id,
-      handle: p.handle,
+      handle: cleanRiderName(p.handle) ?? "Rider",
       kind: p.kind,
       audioPath: p.audio_path,
       text: p.text,
@@ -314,11 +342,12 @@ export class PelotonEngine {
   }
 
   // ---- transmit (VOX → §4 pipeline) ----
-  private enqueueSend(blob: Blob) {
-    this.sendChain = this.sendChain.then(() => this.sendSnippet(blob)).catch(() => {});
+  private enqueueSend(blob: Blob, whole: boolean) {
+    // Serial: the chunks of a phrase must reach the pack in order.
+    this.sendChain = this.sendChain.then(() => this.sendSnippet(blob, whole)).catch(() => {});
   }
 
-  private async sendSnippet(blob: Blob) {
+  private async sendSnippet(blob: Blob, whole: boolean) {
     if (!this.started) return;
     const trip = this.tripId;
     const fix = this.fix;
@@ -357,6 +386,12 @@ export class PelotonEngine {
         created_at: new Date().toISOString(),
         convoy: this.wireTag,
       };
+      // The pack hears it as soon as the audio is up; the row (moderation, Road Guide)
+      // follows and never delays delivery.
+      if (this.ownTopic) await broadcastToTopics([this.ownTopic], payload);
+      this.snippetsSent += 1;
+      this.status = null;
+      this.publish();
       const { error: insErr } = await supabase.from("messages").insert({
         id: messageId,
         trip_id: trip,
@@ -368,14 +403,14 @@ export class PelotonEngine {
         speed: payload.speed,
         convoy_tag: this.wireTag,
       });
-      if (insErr) throw new Error(`insert: ${insErr.message}`);
-      if (this.ownTopic) await broadcastToTopics([this.ownTopic], payload);
+      if (insErr) {
+        console.warn("message row insert failed", insErr.message);
+        return;
+      }
       // No "sent" earcon: the rider may already be talking again and it would land in
       // the next snippet. The counter confirms instead.
-      this.snippetsSent += 1;
-      this.status = null;
-      this.publish();
-      if (roadGuideEnabled()) void this.askRoadGuide(payload);
+      // §17: only a phrase that went out whole — a 3 s chunk is not a question.
+      if (whole && roadGuideEnabled()) void this.askRoadGuide(payload);
     } catch (e) {
       console.warn("send failed", e);
       this.status = "Send failed — check connection";
@@ -383,9 +418,21 @@ export class PelotonEngine {
     }
   }
 
+  /**
+   * §17 answer to what this rider just said (private). With other riders around it is a
+   * fallback (§16.6): the pack gets REPLY_WAIT_MS to answer first, and the AI answer is
+   * dropped if anyone did.
+   */
   private async askRoadGuide(sent: BurstPayload) {
+    const askedAt = Date.now();
     const answer = await requestRoadGuide(sent);
-    if (answer && this.started) this.queue.enqueue(answer);
+    if (!answer) return;
+    if (this.countRiders() > 0) {
+      const wait = askedAt + REPLY_WAIT_MS - Date.now();
+      if (wait > 0) await new Promise((r) => setTimeout(r, wait));
+    }
+    if (!this.started || this.lastIncomingAt > askedAt) return; // a rider replied
+    this.queue.enqueue(answer);
   }
 
   private async checkShadowban(): Promise<boolean> {

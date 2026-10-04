@@ -37,6 +37,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.carradio.app.core.PelotonTag
+import com.carradio.app.core.RiderName
 
 /**
  * Pre-ride screen: join a pack by code, mint a new code to share, or ride open road.
@@ -50,6 +51,8 @@ fun JoinScreen(
     onJoinPack: () -> Unit,
     onNewPack: () -> Unit,
     onRideOpen: () -> Unit,
+    name: String,
+    onNameChange: (String) -> Unit,
     roadGuide: Boolean,
     onRoadGuideChange: (Boolean) -> Unit
 ) {
@@ -73,7 +76,48 @@ fun JoinScreen(
             lineHeight = 22.sp
         )
 
-        Spacer(Modifier.height(32.dp))
+        Spacer(Modifier.height(28.dp))
+        Eyebrow("Your name · optional")
+        Spacer(Modifier.height(8.dp))
+        BasicTextField(
+            value = name,
+            onValueChange = { onNameChange(it.take(RiderName.MAX_LENGTH)) },
+            singleLine = true,
+            textStyle = TextStyle(
+                fontWeight = FontWeight.Bold,
+                fontSize = 20.sp,
+                color = c.ink,
+                textAlign = TextAlign.Center
+            ),
+            cursorBrush = SolidColor(c.signal),
+            keyboardOptions = KeyboardOptions(
+                capitalization = KeyboardCapitalization.Words,
+                autoCorrect = false,
+                imeAction = ImeAction.Done
+            ),
+            decorationBox = { inner ->
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(c.surface)
+                        .border(2.dp, c.line, RoundedCornerShape(14.dp))
+                        .padding(vertical = 16.dp, horizontal = 12.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (name.isEmpty()) {
+                        Text(
+                            text = "Leave blank for a random one",
+                            fontSize = 16.sp,
+                            color = c.muted
+                        )
+                    }
+                    inner()
+                }
+            }
+        )
+
+        Spacer(Modifier.height(24.dp))
         Eyebrow("Join a pack")
         Spacer(Modifier.height(8.dp))
         BasicTextField(
@@ -208,7 +252,7 @@ fun JoinScreen(
 
         Spacer(Modifier.height(36.dp))
         Text(
-            text = "New rider name every ride · voice kept 24 h · no accounts",
+            text = "Voice kept 24 h · no accounts",
             fontSize = 12.sp,
             color = c.muted,
             textAlign = TextAlign.Center,
