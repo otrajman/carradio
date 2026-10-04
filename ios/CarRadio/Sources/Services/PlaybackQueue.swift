@@ -103,6 +103,9 @@ final class PlaybackQueue: NSObject, ObservableObject {
 
     var isIdle: Bool { !processing && queue.isEmpty }
 
+    /// The payload sounding right now, if any.
+    var currentPayload: BurstPayload? { currentItem?.payload }
+
     /// The payload most recently played to completion (for "mute the last
     /// speaker" when nothing is currently playing).
     var lastFinishedPayload: BurstPayload? { lastFinishedItem?.payload }

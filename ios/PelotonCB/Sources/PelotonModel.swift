@@ -61,6 +61,19 @@ final class PelotonModel: ObservableObject {
     private let playedIDs = PlayedIDStore()
     /// Chunks of a phrase must reach the pack in order: each send awaits the previous one.
     private var sendTail: Task<Void, Never>?
+
+    // AI stays out of the way of people (PROTOCOL §16.6): local comments wait here for a
+    // lull, and a Road Guide answer waits to see whether the pack replies first.
+    private var pendingComments: [BreadcrumbMessage] = []
+    /// Last time anyone — the pack, this rider, or the AI — was heard or on air.
+    private var lastActivity = Date()
+    /// Last time a pack burst passed the receive filter.
+    private var lastIncoming = Date.distantPast
+    private var silenceTask: Task<Void, Never>?
+
+    private static let silenceFill: TimeInterval = 30
+    private static let maxPendingComments = 3
+    private static let replyWait: TimeInterval = 8
     private var cancellables: Set<AnyCancellable> = []
 
     private init() {
@@ -96,6 +109,14 @@ final class PelotonModel: ObservableObject {
                 location.requestPermissionAndStart()
                 nowPlaying.activate()
                 paused = false
+                lastActivity = Date()
+                silenceTask?.cancel()
+                silenceTask = Task { [weak self] in
+                    while !Task.isCancelled {
+                        try? await Task.sleep(nanoseconds: 2_000_000_000)
+                        self?.fillSilence()
+                    }
+                }
                 if !vox.start() {
                     mic = .paused
                     status = "Microphone unavailable"
@@ -114,6 +135,9 @@ final class PelotonModel: ObservableObject {
         nowPlaying.deactivate()
         playback.stopAll()
         sendTail = nil
+        silenceTask?.cancel()
+        silenceTask = nil
+        pendingComments = []
         AudioSessionController.shared.unpinVox()
         tripID = nil
         currentGps = nil
@@ -186,7 +210,9 @@ final class PelotonModel: ObservableObject {
 
         vox.onSnippet = { [weak self] url, whole in self?.send(url, wholePhrase: whole) }
         vox.onMic = { [weak self] m in
-            guard let self, !self.paused || m == .paused else { return }
+            guard let self else { return }
+            if m == .onAir { self.lastActivity = Date() }
+            guard !self.paused || m == .paused else { return }
             self.mic = m
         }
         vox.onLevel = { [weak self] v in self?.micLevel = v }
@@ -199,6 +225,7 @@ final class PelotonModel: ObservableObject {
         }
         playback.onItemFinished = { [weak self] _ in
             guard let self else { return }
+            self.lastActivity = Date()
             self.releaseTurnTask?.cancel()
             self.releaseTurnTask = Task { [weak self] in
                 try? await Task.sleep(nanoseconds: 350_000_000)
@@ -250,9 +277,9 @@ final class PelotonModel: ObservableObject {
         Task { await realtime.updateRooms(subscribe: subscribe, ownRoom: own, presence: presence) }
     }
 
-    /// §12 synthetic nodes (Gemini-voiced alerts + local trivia), once per res-7 cell like
-    /// Car Radio. Played to this rider only; never broadcast to the pack. Each script is
-    /// heard once, even across rides.
+    /// §12 synthetic nodes (Gemini-voiced alerts + local trivia), fetched once per res-7
+    /// cell like Car Radio — but only queued here. `fillSilence` plays one when the ride has
+    /// gone quiet; each script is heard once, even across rides.
     private func fetchSystemScriptsIfNewCell(_ fix: GpsState) {
         guard Constants.syntheticNodes,
               let cell = RoomManager.res7Cell(lat: fix.lat, lng: fix.lng),
@@ -260,11 +287,25 @@ final class PelotonModel: ObservableObject {
         Task {
             guard let messages = try? await supabase.fetchSyntheticNodes(lat: fix.lat, lng: fix.lng),
                   phase == .riding else { return }
-            for m in messages where !playedIDs.contains(m.id) {
-                playedIDs.markPlayed(m.id)
-                playback.enqueue(PlaybackQueue.Item(payload: m.asPayload(), isBreadcrumb: true))
+            for m in messages where !playedIDs.contains(m.id)
+                && !pendingComments.contains(where: { $0.id == m.id }) {
+                pendingComments.append(m)
+            }
+            if pendingComments.count > Self.maxPendingComments {
+                pendingComments.removeFirst(pendingComments.count - Self.maxPendingComments)
             }
         }
+    }
+
+    /// §16.6: one local comment after `silenceFill` with nobody talking or playing.
+    private func fillSilence() {
+        guard phase == .riding, !pendingComments.isEmpty,
+              !isPlaying, mic != .onAir,
+              Date().timeIntervalSince(lastActivity) >= Self.silenceFill else { return }
+        let comment = pendingComments.removeFirst()
+        lastActivity = Date()
+        playedIDs.markPlayed(comment.id)
+        playback.enqueue(PlaybackQueue.Item(payload: comment.asPayload(), isBreadcrumb: true))
     }
 
     // MARK: Receive
@@ -283,6 +324,10 @@ final class PelotonModel: ObservableObject {
         )
         guard result.verdict == .play, !payload.isSystem else { return }
         if !isPack, !PelotonGeo.inRange(sender: payload, receiver: gps) { return }
+        lastIncoming = Date()
+        lastActivity = lastIncoming
+        // §16.6: people outrank the AI — a live burst cuts off a comment or guide answer.
+        if playback.currentPayload?.isSystem == true { playback.skipCurrent() }
         var shown = payload
         shown.handle = RiderName.clean(payload.handle) ?? "Rider"
         playback.enqueue(PlaybackQueue.Item(payload: shown))
@@ -313,14 +358,22 @@ final class PelotonModel: ObservableObject {
             )
             try? FileManager.default.removeItem(at: url)
             snippetsSent += 1
+            lastActivity = Date()
             if sent != nil { status = nil }
             // §17: the gated Road Guide may answer this rider privately — only for a phrase
             // that went out whole (a 3 s chunk is not a question), and off the send chain.
+            // With other riders around it is a fallback (§16.6): the pack gets `replyWait`
+            // to answer first, and the AI answer is dropped if anyone did.
             guard let sent, wholePhrase, Constants.roadGuideEnabled else { return }
             Task {
-                if let answer = await supabase.askRoadGuide(about: sent), phase == .riding {
-                    playback.enqueue(PlaybackQueue.Item(payload: answer, isBreadcrumb: true))
+                let askedAt = Date()
+                guard let answer = await supabase.askRoadGuide(about: sent) else { return }
+                if riderCount > 0 {
+                    let wait = Self.replyWait - Date().timeIntervalSince(askedAt)
+                    if wait > 0 { try? await Task.sleep(nanoseconds: UInt64(wait * 1_000_000_000)) }
                 }
+                guard phase == .riding, lastIncoming < askedAt else { return }
+                playback.enqueue(PlaybackQueue.Item(payload: answer, isBreadcrumb: true))
             }
         }
     }
