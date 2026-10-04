@@ -6,11 +6,12 @@ name: iOS — TestFlight upload
 #   APPLE_CERT_PASSWORD      the .p12 export password
 #   ASC_KEY_ID / ASC_ISSUER_ID / ASC_KEY_P8_BASE64
 #                            App Store Connect API key (App Manager role), .p8 base64
-# Provisioning profiles are created/downloaded by Xcode cloud signing via the API key
-# (-allowProvisioningUpdates), so none need to be made by hand.
-# Car Radio signs with its real entitlements (CarPlay communication, granted on the
-# live.car-radio.app App ID 2026-10-03). If Apple ever revokes it, set the CarRadio matrix
-# entry's `entitlements` to CarRadio/Resources/CarRadio-TestFlight.entitlements.
+# Provisioning profiles (IOS_APP_STORE) were created through the App Store Connect API
+# (.secrets/asc-profiles.mjs, local only) and live in PROFILE_CARRADIO_BASE64 /
+# PROFILE_PELOTON_BASE64. Manual signing: Xcode's automatic path insists on a Development
+# profile for the archive step, which needs a registered device, and the team has none.
+# Car Radio's entitlements file is chosen at runtime: the CarPlay one if the profile carries
+# com.apple.developer.carplay-communication, otherwise the CarPlay-free fallback.
 
 on:
   push:
@@ -29,9 +30,11 @@ jobs:
       matrix:
         include:
           - scheme: PelotonCB
-            entitlements: ""
+            profile_secret: PROFILE_PELOTON_BASE64
+            profile_name: PelotonCB AppStore
           - scheme: CarRadio
-            entitlements: ""  # project default: CarRadio.entitlements (CarPlay)
+            profile_secret: PROFILE_CARRADIO_BASE64
+            profile_name: CarRadio Live AppStore
     steps:
       - uses: actions/checkout@v4
       - run: brew install xcodegen
@@ -54,6 +57,27 @@ jobs:
           security list-keychain -d user -s "$KEYCHAIN" login.keychain-db
           echo "KEYCHAIN=$KEYCHAIN" >> $GITHUB_ENV
 
+      - name: Install provisioning profile
+        env:
+          PROFILE_BASE64: ${{ secrets[matrix.profile_secret] }}
+        run: |
+          set -euo pipefail
+          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+          echo "$PROFILE_BASE64" | base64 --decode > $RUNNER_TEMP/profile.mobileprovision
+          UUID=$(security cms -D -i $RUNNER_TEMP/profile.mobileprovision | plutil -extract UUID raw -)
+          cp $RUNNER_TEMP/profile.mobileprovision ~/Library/MobileDevice/Provisioning\ Profiles/$UUID.mobileprovision
+          echo "profile $UUID installed"
+          ENT=""
+          if [ "${{ matrix.scheme }}" = "CarRadio" ]; then
+            if security cms -D -i $RUNNER_TEMP/profile.mobileprovision | grep -q carplay-communication; then
+              echo "profile carries the CarPlay entitlement"
+            else
+              echo "profile has NO CarPlay entitlement: signing with the CarPlay-free fallback"
+              ENT="CODE_SIGN_ENTITLEMENTS=CarRadio/Resources/CarRadio-TestFlight.entitlements"
+            fi
+          fi
+          echo "ENTITLEMENTS_OVERRIDE=$ENT" >> $GITHUB_ENV
+
       - name: Write App Store Connect API key
         env:
           P8_BASE64: ${{ secrets.ASC_KEY_P8_BASE64 }}
@@ -67,21 +91,15 @@ jobs:
           TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           set -euo pipefail
-          EXTRA=""
-          if [ -n "${{ matrix.entitlements }}" ]; then
-            EXTRA="CODE_SIGN_ENTITLEMENTS=${{ matrix.entitlements }}"
-          fi
           xcodebuild -project CarRadio.xcodeproj -scheme ${{ matrix.scheme }} \
             -destination 'generic/platform=iOS' -configuration Release \
             -archivePath build/${{ matrix.scheme }}.xcarchive archive \
-            -allowProvisioningUpdates \
-            -authenticationKeyPath "$ASC_KEY_PATH" \
-            -authenticationKeyID "${{ secrets.ASC_KEY_ID }}" \
-            -authenticationKeyIssuerID "${{ secrets.ASC_ISSUER_ID }}" \
-            DEVELOPMENT_TEAM="$TEAM_ID" CODE_SIGN_STYLE=Automatic \
+            DEVELOPMENT_TEAM="$TEAM_ID" CODE_SIGN_STYLE=Manual \
+            CODE_SIGN_IDENTITY="Apple Distribution" \
+            PROVISIONING_PROFILE_SPECIFIER="${{ matrix.profile_name }}" \
             CURRENT_PROJECT_VERSION=${{ github.run_number }} \
             MARKETING_VERSION=0.1.${{ github.run_number }} \
-            $EXTRA | tail -40
+            $ENTITLEMENTS_OVERRIDE | tail -40
 
       - name: Export + upload to TestFlight
         env:
@@ -95,7 +113,11 @@ jobs:
             <key>method</key><string>app-store-connect</string>
             <key>destination</key><string>upload</string>
             <key>teamID</key><string>$TEAM_ID</string>
-            <key>signingStyle</key><string>automatic</string>
+            <key>signingStyle</key><string>manual</string>
+            <key>provisioningProfiles</key><dict>
+              <key>${{ matrix.scheme == 'CarRadio' && 'live.car-radio.app' || 'com.pelotoncb.app' }}</key>
+              <string>${{ matrix.profile_name }}</string>
+            </dict>
             <key>uploadSymbols</key><true/>
             <key>manageAppVersionAndBuildNumber</key><false/>
           </dict></plist>
