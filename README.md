@@ -51,13 +51,13 @@ its APK/AAB paths moved to `apk/carradio/...` and `bundle/carradioRelease/...` (
 - **Synthetic nodes, voiced** — weather alerts + local trivia are rendered once by Gemini TTS
   and stored in the `synthetic_voice` bucket; every client (PWA, Android, iOS, both apps)
   plays the audio and falls back to on-device TTS of the same text. PROTOCOL §12.
-- **Road Guide** — ask about the road, the scenery, or places nearby and a Gemini Live voice
+- **Road Guide** — ask about the road, the scenery, or places nearby and a Gemini voice
   answers *you*. Everything else you say is ignored. A two-model verification gate with
   deterministic rules decides, and fails closed. PROTOCOL §17.
   `supabase/functions/road-guide/`, rules + tests in `supabase/functions/_shared/gate*.ts`.
 - **Setup**: `supabase secrets set GEMINI_API_KEY=...` (no key → text-only alerts and a silent
   guide; nothing breaks). Optional: `ROAD_GUIDE_ENABLED=false` kill switch,
-  `GEMINI_MODEL_{CLASSIFIER,VERIFIER,TTS,LIVE}` / `GEMINI_VOICE_{TOWER,GUIDE}` overrides.
+  `GEMINI_MODEL_{CLASSIFIER,VERIFIER,GUIDE,TTS,LIVE}`, `ROAD_GUIDE_ENGINE=live` / `GEMINI_VOICE_{TOWER,GUIDE}` overrides.
 - **Gate eval with real models**: `GEMINI_API_KEY=... node supabase/functions/road-guide/eval/run-eval.ts`
   (fails on any false accept). Unit tests: `node --test supabase/functions/_shared/*.test.ts`.
 

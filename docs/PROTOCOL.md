@@ -334,13 +334,18 @@ request). In PelotonCB it goes through the half-duplex turn like any burst.
 4. **Independent verifier** (model B, `GEMINI_MODEL_VERIFIER`, transcript only, different
    prompt, transcript fenced as data). Two-key rule: both must say on-topic in an allowed
    category with confidence ≥ 0.8, and the classifier must say a response is warranted.
-5. **Answer**: Gemini Live (`GEMINI_MODEL_LIVE`, Google Search tool) gets the *gated
-   transcript* (never raw audio) plus location context (position, heading, speed, named
-   places within 10 km with ahead/left/right/behind). Scope-locked system instruction;
-   1–3 sentences, < 60 words.
+5. **Answer**: `GEMINI_MODEL_GUIDE` (Google Search grounding) gets the *gated transcript*
+   (never raw audio) plus location context (position, heading, speed, named places within
+   10 km with ahead/left/right/behind). Scope-locked system instruction; 1–3 sentences,
+   < 60 words. Runs concurrently with step 4; the draft is discarded if 4 fails.
+   (`ROAD_GUIDE_ENGINE=live` instead takes one Gemini Live turn, `GEMINI_MODEL_LIVE`,
+   which also yields the audio — ~3x slower, since audio arrives at speaking pace.)
 6. **Output gate**: deterministic screen (3–70 words, no markup/links, no
    eyes-off-road / speed-up instructions, no persona leaks) + output verifier (model B):
-   on-topic, actually answers, not unsafe, not speculative, confidence ≥ 0.8.
+   on-topic, actually answers, not unsafe, not speculative, confidence ≥ 0.8. The TTS
+   render (`GEMINI_MODEL_TTS`, voice `GEMINI_VOICE_GUIDE`, brisk tour-guide style) runs
+   concurrently and is thrown away on a fail. Stage timings are logged in
+   `road_guide_events.timings`; target ≈ 6–8 s end to end.
 7. Only then: WAV → `synthetic_voice/guide/<trip_id>/<uuid>.wav`, logged `responded`.
 
 Rules live in `supabase/functions/_shared/gate.ts` (models supply verdicts; code decides),

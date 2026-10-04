@@ -12,9 +12,10 @@
 //   2. classifier (audio → transcript + topic)           model A
 //   3. deterministic transcript screen (injection, length, junk)
 //   4. independent verifier (transcript only)             model B — both must agree
-//   5. Gemini Live answers the gated transcript + location context (Google Search on)
-//   6. deterministic output screen + output verifier      model B
+//   5. answer text (search-grounded) from the gated transcript + location context
+//   6. deterministic output screen + output verifier      model B   ∥  TTS of the answer
 //   7. store WAV in synthetic_voice, log, return
+// ROAD_GUIDE_ENGINE=live swaps 5–6 for one Gemini Live turn (slower: audio at speaking pace).
 // Every evaluation is logged to road_guide_events (24 h retention) for tuning.
 
 import { createClient } from "npm:@supabase/supabase-js@2";
@@ -32,9 +33,11 @@ import {
   audioMimeForPath,
   audioPart,
   generateJson,
+  generateText,
   geminiKey,
   liveAnswer,
   MODELS,
+  synthesizeSpeech,
   VOICES,
 } from "../_shared/gemini.ts";
 import {
@@ -59,6 +62,8 @@ const supabase = createClient(
 );
 
 const HANDLE = "Road Guide";
+const ENGINE = Deno.env.get("ROAD_GUIDE_ENGINE") === "live" ? "live" : "tts";
+const GUIDE_STYLE = "quickly and energetically, like an upbeat tour guide calling out sights over the wind, no pauses between sentences";
 const MAX_MESSAGE_AGE_MS = 2 * 60_000;
 const MAX_AUDIO_BYTES = 262_144;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -96,7 +101,10 @@ async function log(
   r: Req,
   outcome: "responded" | "gated" | "rate_limited" | "error",
   reasons: string[],
-  extra: { transcript?: string; category?: string; response_text?: string; response_audio_path?: string } = {},
+  extra: {
+    transcript?: string; category?: string; response_text?: string; response_audio_path?: string;
+    timings?: Record<string, number>;
+  } = {},
 ) {
   await supabase.from("road_guide_events").insert({
     trip_id: r.trip_id,
@@ -107,7 +115,25 @@ async function log(
     category: extra.category ?? null,
     response_text: extra.response_text?.slice(0, 1000) ?? null,
     response_audio_path: extra.response_audio_path ?? null,
+    timings: extra.timings ?? null,
   });
+}
+
+/** Stage stopwatch: `t.mark("x")` records ms since the previous mark; `t.all` adds total. */
+function stopwatch() {
+  const t0 = Date.now();
+  let last = t0;
+  const marks: Record<string, number> = {};
+  return {
+    mark(name: string) {
+      const now = Date.now();
+      marks[name] = now - last;
+      last = now;
+    },
+    get all() {
+      return { ...marks, total: Date.now() - t0 };
+    },
+  };
 }
 
 // --- Location context ----------------------------------------------------------------
@@ -170,12 +196,23 @@ Deno.serve(async (req) => {
     r = parseReq(await req.json());
     if (!r) return json({ error: "bad request" }, 400);
 
+    const sw = stopwatch();
     // 1. The burst must be this trip's own, fresh, voice message in its own folder.
-    const { data: msg } = await supabase
-      .from("messages")
-      .select("id, trip_id, kind, audio_path, created_at")
-      .eq("id", r.message_id)
-      .maybeSingle();
+    //    (The three checks are independent: one round trip instead of three.)
+    const sinceHour = new Date(Date.now() - 3_600_000).toISOString();
+    const [{ data: msg }, { data: banned }, { data: recent }] = await Promise.all([
+      supabase
+        .from("messages")
+        .select("id, trip_id, kind, audio_path, created_at")
+        .eq("id", r.message_id)
+        .maybeSingle(),
+      supabase.rpc("is_shadowbanned", { p_trip_id: r.trip_id }),
+      supabase
+        .from("road_guide_events")
+        .select("outcome, created_at")
+        .eq("trip_id", r.trip_id)
+        .gt("created_at", sinceHour),
+    ]);
     const expectedPrefix = `voice_bursts/${r.trip_id}/`;
     if (!msg || msg.trip_id !== r.trip_id || msg.kind !== "voice" ||
         typeof msg.audio_path !== "string" || !msg.audio_path.startsWith(expectedPrefix) ||
@@ -183,15 +220,8 @@ Deno.serve(async (req) => {
       return silent(); // not logged: could be a forged/foreign id
     }
 
-    const { data: banned } = await supabase.rpc("is_shadowbanned", { p_trip_id: r.trip_id });
     if (banned === true) return silent();
 
-    const sinceHour = new Date(Date.now() - 3_600_000).toISOString();
-    const { data: recent } = await supabase
-      .from("road_guide_events")
-      .select("outcome, created_at")
-      .eq("trip_id", r.trip_id)
-      .gt("created_at", sinceHour);
     const rows = recent ?? [];
     const limit = rateLimit(
       Date.now(),
@@ -203,6 +233,11 @@ Deno.serve(async (req) => {
       return silent();
     }
 
+    sw.mark("preflight");
+
+    // Location context needs nothing from the models: fetch it while they run.
+    const placesP = nearbyPlaces(r).catch(() => [] as Awaited<ReturnType<typeof nearbyPlaces>>);
+
     // 2. Classifier on the rider's audio.
     const objectPath = msg.audio_path.slice("voice_bursts/".length);
     const mime = audioMimeForPath(objectPath);
@@ -212,66 +247,91 @@ Deno.serve(async (req) => {
       return silent();
     }
     const audio = new Uint8Array(await blob.arrayBuffer());
+    sw.mark("download");
     const cls = parseInputClassification(await generateJson(
       MODELS.classifier,
       CLASSIFIER_SYSTEM,
       [audioPart(audio, mime), { text: "Transcribe and classify this clip." }],
       CLASSIFIER_SCHEMA,
     ));
+    sw.mark("classifier");
 
     // 3. Cheap deterministic screen before spending the second model call.
     if (!cls || !screenTranscript(cls.transcript).pass ||
         !cls.on_topic || !cls.warrants_response || cls.injection_suspected) {
       const d = inputDecision(cls, null);
       await log(r, "gated", d.reasons.filter((x) => x !== "verifier_invalid"), {
-        transcript: cls?.transcript, category: cls?.category,
+        transcript: cls?.transcript, category: cls?.category, timings: sw.all,
       });
       return silent();
     }
 
-    // 4. Independent verifier on the transcript alone (different model, different prompt).
-    const verdict = parseTranscriptVerdict(await generateJson(
-      MODELS.verifier,
-      VERIFIER_SYSTEM,
-      [{ text: fenceUntrusted("RIDER", cls.transcript) }],
-      VERIFIER_SCHEMA,
-    ));
+    // 4 + 5. The independent verifier (different model, different prompt) and the answer
+    // both need only the transcript, so they run concurrently. Nothing is returned until
+    // the verifier passes: a rejected transcript's answer is discarded, so the gate is
+    // still fail-closed — it just no longer adds its latency to the answer.
+    const places = await placesP;
+    const context = contextBlock(r, places);
+    sw.mark("places");
+    const userText = `${context}\n\nThe traveler said:\n${fenceUntrusted("RIDER", cls.transcript)}`;
+    const [verdict, draft] = await Promise.all([
+      generateJson(
+        MODELS.verifier,
+        VERIFIER_SYSTEM,
+        [{ text: fenceUntrusted("RIDER", cls.transcript) }],
+        VERIFIER_SCHEMA,
+      ).then(parseTranscriptVerdict),
+      ENGINE === "live"
+        ? liveAnswer({ systemInstruction: GUIDE_SYSTEM, userText, voice: VOICES.guide })
+        : generateText(MODELS.guide, GUIDE_SYSTEM, userText, { search: true })
+          .then((text) => (text ? { text, wav: null as Uint8Array | null } : null)),
+    ]);
+    sw.mark(ENGINE === "live" ? "verifier+live" : "verifier+answer");
     const input = inputDecision(cls, verdict);
     if (!input.pass) {
-      await log(r, "gated", input.reasons, { transcript: cls.transcript, category: cls.category });
-      return silent();
-    }
-
-    // 5. Gemini Live answers (text turn: the session never hears raw rider audio).
-    const places = await nearbyPlaces(r);
-    const context = contextBlock(r, places);
-    const answer = await liveAnswer({
-      systemInstruction: GUIDE_SYSTEM,
-      userText: `${context}\n\nThe traveler said:\n${fenceUntrusted("RIDER", cls.transcript)}`,
-      voice: VOICES.guide,
-    });
-    if (!answer || !answer.text) {
-      await log(r, "error", ["live_no_answer"], { transcript: cls.transcript, category: cls.category });
-      return silent();
-    }
-
-    // 6. Verify what was actually said before anyone hears it.
-    const outVerdict = parseOutputVerdict(await generateJson(
-      MODELS.verifier,
-      OUTPUT_VERIFIER_SYSTEM,
-      [{
-        text: `${context}\n\nTraveler's message:\n${fenceUntrusted("RIDER", cls.transcript)}\n\n` +
-          `Proposed spoken answer:\n${fenceUntrusted("ANSWER", answer.text)}`,
-      }],
-      OUTPUT_VERIFIER_SCHEMA,
-    ));
-    const output = outputDecision(answer.text, outVerdict);
-    if (!output.pass) {
-      await log(r, "gated", output.reasons, {
-        transcript: cls.transcript, category: cls.category, response_text: answer.text,
+      await log(r, "gated", input.reasons, {
+        transcript: cls.transcript, category: cls.category, timings: sw.all,
       });
       return silent();
     }
+    if (!draft || !draft.text) {
+      await log(r, "error", [ENGINE === "live" ? "live_no_answer" : "no_answer"], {
+        transcript: cls.transcript, category: cls.category, timings: sw.all,
+      });
+      return silent();
+    }
+
+    // 6. Verify what will be said before anyone hears it. The voice is synthesized in
+    // parallel (tts engine) and thrown away if the verifier says no.
+    const [outVerdict, wav] = await Promise.all([
+      generateJson(
+        MODELS.verifier,
+        OUTPUT_VERIFIER_SYSTEM,
+        [{
+          text: `${context}\n\nTraveler's message:\n${fenceUntrusted("RIDER", cls.transcript)}\n\n` +
+            `Proposed spoken answer:\n${fenceUntrusted("ANSWER", draft.text)}`,
+        }],
+        OUTPUT_VERIFIER_SCHEMA,
+      ).then(parseOutputVerdict),
+      draft.wav ? Promise.resolve(draft.wav) : synthesizeSpeech(draft.text, VOICES.guide, GUIDE_STYLE),
+    ]);
+    sw.mark(draft.wav ? "output_verifier" : "output_verifier+tts");
+    const output = outputDecision(draft.text, outVerdict);
+    if (!output.pass) {
+      await log(r, "gated", output.reasons, {
+        transcript: cls.transcript, category: cls.category, response_text: draft.text,
+        timings: sw.all,
+      });
+      return silent();
+    }
+    if (!wav) {
+      await log(r, "error", ["tts_failed"], {
+        transcript: cls.transcript, category: cls.category, response_text: draft.text,
+        timings: sw.all,
+      });
+      return silent();
+    }
+    const answer = { text: draft.text, wav };
 
     // 7. Store + return. Unguessable path; public-by-URL like rider bursts; 24 h cleanup.
     const id = crypto.randomUUID();
@@ -279,14 +339,17 @@ Deno.serve(async (req) => {
     const { error: upErr } = await supabase.storage
       .from("synthetic_voice")
       .upload(objectName, answer.wav, { contentType: "audio/wav" });
+    sw.mark("upload");
     if (upErr) {
-      await log(r, "error", ["upload_failed"], { transcript: cls.transcript, category: cls.category });
+      await log(r, "error", ["upload_failed"], {
+        transcript: cls.transcript, category: cls.category, timings: sw.all,
+      });
       return silent();
     }
     const audioPath = `synthetic_voice/${objectName}`;
     await log(r, "responded", [], {
       transcript: cls.transcript, category: cls.category,
-      response_text: answer.text, response_audio_path: audioPath,
+      response_text: answer.text, response_audio_path: audioPath, timings: sw.all,
     });
     return json({ respond: true, id, text: answer.text, audio_path: audioPath, handle: HANDLE });
   } catch (e) {

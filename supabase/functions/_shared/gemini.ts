@@ -17,6 +17,10 @@ export const MODELS = {
   /** Independent second opinion + output verifier: a DIFFERENT model on purpose. */
   verifier: env("GEMINI_MODEL_VERIFIER", "gemini-3.8-flash"),
   tts: env("GEMINI_MODEL_TTS", "gemini-3.8-flash-lite-tts"),
+  /** Road Guide answer text (search-grounded); voiced by `tts`. */
+  guide: env("GEMINI_MODEL_GUIDE", "gemini-3.8-flash"),
+  /** Optional Road Guide engine (ROAD_GUIDE_ENGINE=live): one Live turn, audio streamed by
+   *  the model. ~3x slower end to end than guide+tts because audio arrives at speaking pace. */
   live: env("GEMINI_MODEL_LIVE", "gemini-3.8-live"),
 };
 
@@ -91,6 +95,30 @@ export async function generateJson(
   return null;
 }
 
+/**
+ * Plain text answer (optionally Google-Search grounded). Returns the trimmed text or null.
+ */
+export async function generateText(
+  model: string,
+  systemInstruction: string,
+  userText: string,
+  opts: { search?: boolean; timeoutMs?: number } = {},
+): Promise<string | null> {
+  const res = await post(model, {
+    systemInstruction: { parts: [{ text: systemInstruction }] },
+    contents: [{ role: "user", parts: [{ text: userText }] }],
+    generationConfig: { temperature: 0.4 },
+    ...(opts.search ? { tools: [{ googleSearch: {} }] } : {}),
+  }, opts.timeoutMs ?? 12_000);
+  if (!res?.ok) return null;
+  try {
+    const text = candidateText(await res.json());
+    return text?.trim() || null;
+  } catch {
+    return null;
+  }
+}
+
 export function audioPart(bytes: Uint8Array, mimeType: string): Part {
   return { inlineData: { mimeType, data: bytesToBase64(bytes) } };
 }
@@ -118,6 +146,10 @@ function isWav(bytes: Uint8Array): boolean {
 /**
  * Single-speaker TTS → WAV bytes. 3.8 TTS models return a complete WAV by default; older
  * ones return raw 24 kHz L16 — both handled.
+ *
+ * `style` is a natural-language delivery instruction ("calm, unhurried", "quickly and
+ * energetically"); it goes in the prompt the documented way ("Say <style>: <text>"), which
+ * the model follows far more reliably than the speech_metadata hint (kept for older models).
  */
 export async function synthesizeSpeech(
   text: string,
@@ -126,7 +158,7 @@ export async function synthesizeSpeech(
   timeoutMs = 20_000,
 ): Promise<Uint8Array | null> {
   const res = await post(MODELS.tts, {
-    contents: [{ role: "user", parts: [{ text, speech_metadata: { style } }] }],
+    contents: [{ role: "user", parts: [{ text: `Say ${style}: ${text}`, speech_metadata: { style } }] }],
     generationConfig: {
       responseModalities: ["AUDIO"],
       speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: voice } } },
