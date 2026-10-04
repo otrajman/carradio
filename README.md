@@ -63,16 +63,21 @@ its APK/AAB paths moved to `apk/carradio/...` and `bundle/carradioRelease/...` (
 
 ## TestFlight
 
-`.github/workflows/testflight.yml` archives and uploads both apps on every `ios/` push once
-the repository variable `TESTFLIGHT_ENABLED=true` and the secrets listed at the top of the
-workflow exist (team id, Apple Distribution .p12 + password, App Store Connect API key).
-Xcode cloud signing creates the provisioning profiles itself. Apple assigned the CarPlay
-Communication capability to `live.car-radio.app`, so Car Radio signs with its real
-entitlements; `CarRadio-TestFlight.entitlements` (no CarPlay) is kept as a fallback.
-Build number = workflow run number; App Store icons live in each target's `Assets.xcassets`.
+`.github/workflows/testflight.yml` archives and uploads both apps on every `ios/` push
+(macos-26 runner: App Store Connect requires the iOS 26 SDK). Gated on the repository
+variable `TESTFLIGHT_ENABLED=true` plus the secrets listed at the top of the workflow:
+team id, Apple Distribution `.p12` + password, App Store Connect API key, and one
+`IOS_APP_STORE` provisioning profile per app (created through the ASC API with
+`.secrets/asc-profiles.mjs`, local only — Xcode's automatic signing needs a registered
+device for the archive step and the team has none). Signing settings sit on the app targets
+in `ios/project.yml`; command-line overrides would leak into Swift package targets.
+Car Radio signs with the CarPlay entitlement only when its profile carries it; until the
+App ID's CarPlay Communication capability is actually enabled it falls back to
+`CarRadio-TestFlight.entitlements`. Build number = workflow run number.
 App Store names: **CarRadio Live** ("Car Radio" was taken; the on-device name stays Car
-Radio) and **PelotonCB**. iOS bundle ids: `live.car-radio.app` (Apple already had `com.carradio.app` registered to
-someone else; Android keeps `com.carradio.app`) and `com.pelotoncb.app`.
+Radio) and **PelotonCB**. iOS bundle ids: `live.car-radio.app` (Apple already had
+`com.carradio.app` registered to someone else; Android keeps `com.carradio.app`) and
+`com.pelotoncb.app`. Both plists set `ITSAppUsesNonExemptEncryption=false`.
 
 ## pelotoncb.com
 
