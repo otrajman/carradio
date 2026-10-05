@@ -342,6 +342,21 @@ Both AI voices are private to the rider and yield to the pack:
 - **People outrank the AI**: a pack burst that passes the filter while a `kind=system`
   item is playing cuts that item off, then plays.
 
+### 16.7 Demo pack (reserved code `DEMO`)
+
+A rider alone — or an app reviewer — can hear a pack. The code `DEMO` (tag
+`d8b53d4ecd7e76c4` = `fromCode("DEMO")`) is reserved: on joining it, and every 15 s while
+in it, the client POSTs `/functions/v1/demo-pack { trip_id, lat?, lng? }`. Each call lets
+the server speak **at most one** scripted line from a cast of three synthetic riders,
+paced by a single `demo_pack_state` row (≥ 12 s between lines, whoever pings), so any
+number of clients share one cast. Lines are ordinary §3 `kind=voice` bursts from real
+trip rows (so §8 mute/report work), `convoy` = the demo tag, voiced once with Gemini TTS
+(a distinct prebuilt voice per rider) and cached under `synthetic_voice/demo/`; with no
+key they carry `text` only and clients TTS locally. The riders are not in presence (the
+function is stateless — edge isolates are frozen after responding), so clients add
+`DEMO_RIDERS = 3` to the roster while in the demo pack. Nothing else is special-cased:
+VOX, half-duplex, Road Guide and §16.6 all behave as in a real pack.
+
 ## 17. Road Guide (gated Gemini voice, Car Radio + PelotonCB)
 
 An AI guide that answers a traveler's own talk about **the route, road conditions, the

@@ -18,6 +18,8 @@ enum Constants {
 
     /// Gated Gemini Road Guide (PROTOCOL §17).
     static let roadGuideFunction = "road-guide"
+    /// PelotonCB demo pack (PROTOCOL §16.7).
+    static let demoPackFunction = "demo-pack"
     /// UserDefaults key for the rider/driver's Road Guide on/off switch (default on).
     static let roadGuideDefaultsKey = "road_guide_enabled"
     static var roadGuideEnabled: Bool {

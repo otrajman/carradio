@@ -217,6 +217,21 @@ class Repository(
         }
     }
 
+    /** PROTOCOL §16.7 — keep the reserved DEMO pack populated while this trip is in it. */
+    suspend fun pingDemoPack(tripId: String, lat: Double?, lng: Double?) = withContext(Dispatchers.IO) {
+        try {
+            val request = buildJsonObject {
+                put("trip_id", tripId)
+                if (lat != null) put("lat", lat)
+                if (lng != null) put("lng", lng)
+            }
+            postFunction(Constants.DEMO_PACK_FN, request.toString())
+        } catch (e: Exception) {
+            Log.w(TAG, "demo-pack call failed", e)
+            null
+        }
+    }
+
     private suspend fun postFunction(name: String, json: String): String? {
         val response = http.post("${Constants.SUPABASE_URL}/functions/v1/$name") {
             header("apikey", Constants.SUPABASE_ANON_KEY)

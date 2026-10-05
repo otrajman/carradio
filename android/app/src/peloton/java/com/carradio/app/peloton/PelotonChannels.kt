@@ -42,7 +42,9 @@ class PelotonChannels(
     private val selfTripId: () -> String?,
     private val selfHandle: () -> String,
     private val onBurst: (BurstPayload) -> Unit,
-    private val onRiderCountChanged: (Int) -> Unit
+    private val onRiderCountChanged: (Int) -> Unit,
+    /** §16.7: synthetic riders the server seats in the DEMO pack (not in presence). */
+    private val extraRiders: Int = 0
 ) {
 
     private class Room(
@@ -141,8 +143,9 @@ class PelotonChannels(
     private fun recomputeRiders() {
         val self = selfTripId()
         val distinct = rooms.values.flatMap { it.riders.values }.filter { it != self }.toSet()
-        PelotonState.riderCount.value = distinct.size
-        onRiderCountChanged(distinct.size)
+        val count = distinct.size + extraRiders
+        PelotonState.riderCount.value = count
+        onRiderCountChanged(count)
     }
 
     private suspend fun maybeTrackPresenceLocked(fix: LocationEngine.Fix) {

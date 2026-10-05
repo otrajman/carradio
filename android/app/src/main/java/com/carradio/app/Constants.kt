@@ -11,6 +11,7 @@ object Constants {
     const val SYNTHETIC_VOICE_BUCKET = "synthetic_voice"
     const val SYNTHETIC_NODES_FN = "synthetic-nodes"
     const val ROAD_GUIDE_FN = "road-guide"
+    const val DEMO_PACK_FN = "demo-pack"
 
     /** Full public URL for a payload audio_path (which already includes the bucket prefix). */
     fun publicAudioUrl(audioPath: String): String {

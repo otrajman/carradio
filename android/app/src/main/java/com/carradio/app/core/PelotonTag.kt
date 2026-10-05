@@ -25,6 +25,12 @@ object PelotonTag {
         return ConvoyTag.fromCode(NAMESPACE + "code:" + normalized)
     }
 
+    /** Reserved pack code: never empty — the server seats three synthetic riders (§16.7). */
+    const val DEMO_CODE = "DEMO"
+    /** Synthetic riders the server seats in the demo pack (added to the roster client-side). */
+    const val DEMO_RIDERS = 3
+    fun isDemo(code: String?): Boolean = normalizeCode(code.orEmpty()) == "demo"
+
     /** Tag shared by every rider in open-road (geo) mode. */
     val OPEN_ROAD: String = ConvoyTag.fromCode(NAMESPACE + "open")!!
 

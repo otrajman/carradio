@@ -4,13 +4,13 @@
 // (filter, queue, earcons, Road Guide, REST broadcast) are reused, the reach rules differ.
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { gridDisk, latLngToCell } from "h3-js";
-import { BUCKET, roadGuideEnabled } from "../config";
+import { BUCKET, roadGuideEnabled, SUPABASE_ANON_KEY, SUPABASE_URL } from "../config";
 import { BURST_MAX_AGE_S, PRESENCE_INTERVAL_MS, SHADOWBAN_CACHE_MS } from "../protocol/constants";
 import { evaluateBurst } from "../protocol/filter";
 import {
   cleanRiderName,
   GEO_RES,
-  geoChannel,
+  DEMO_RIDERS, geoChannel, isDemoCode,
   OPEN_ROAD_TAG,
   packChannel,
   packInRange,
@@ -44,6 +44,8 @@ export interface PelotonSnapshot {
 type Listener = () => void;
 
 const TURN_RELEASE_DELAY_MS = 350;
+const DEMO_PING_MS = 15_000;
+
 /** A chunk of the same phrase follows within this long of the previous one ending. */
 const CONTINUATION_GAP_MS = 2_000;
 /** §16.6: how long the pack gets to answer before the Road Guide does. */
@@ -68,6 +70,7 @@ export class PelotonEngine {
   private ownTopic: string | null = null;
   private trackedTopic: string | null = null;
   private presenceTimer: ReturnType<typeof setInterval> | null = null;
+  private demoTimer: ReturnType<typeof setInterval> | null = null;
   private releaseTimer: ReturnType<typeof setTimeout> | null = null;
 
   private seenIds: string[] = [];
@@ -136,6 +139,23 @@ export class PelotonEngine {
   get isPack(): boolean {
     return this.packTag !== null;
   }
+  /** §16.7: the reserved DEMO pack is kept populated by the server while we're in it. */
+  get isDemo(): boolean {
+    return isDemoCode(this.packCode);
+  }
+
+  private async pingDemoPack() {
+    if (!this.tripId) return;
+    try {
+      await fetch(`${SUPABASE_URL}/functions/v1/demo-pack`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${SUPABASE_ANON_KEY}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ trip_id: this.tripId, lat: this.fix?.lat, lng: this.fix?.lng }),
+      });
+    } catch {
+      // offline: the pack just stays quiet until the next ping
+    }
+  }
 
   // ---- observation ----
   subscribe(fn: Listener): () => void {
@@ -156,7 +176,7 @@ export class PelotonEngine {
       handle: this.handle,
       packCode: this.packCode,
       fix: this.fix,
-      riders: this.countRiders(),
+      riders: this.countRiders() + (this.isDemo ? DEMO_RIDERS : 0),
       mic: this.paused ? "paused" : this.micState,
       micLevel: this.micLevel,
       paused: this.paused,
@@ -182,6 +202,10 @@ export class PelotonEngine {
     this.started = true;
     this.provider.start((fix) => this.onFix(fix));
     this.presenceTimer = setInterval(() => this.trackPresence(), PRESENCE_INTERVAL_MS);
+    if (this.isDemo) {
+      void this.pingDemoPack();
+      this.demoTimer = setInterval(() => void this.pingDemoPack(), DEMO_PING_MS);
+    }
     await this.startMic();
     this.publish();
   }
@@ -190,6 +214,7 @@ export class PelotonEngine {
     this.started = false;
     this.provider.stop();
     if (this.presenceTimer) clearInterval(this.presenceTimer);
+    if (this.demoTimer) clearInterval(this.demoTimer);
     if (this.releaseTimer) clearTimeout(this.releaseTimer);
     this.vox.stop();
     for (const ch of this.channels.values()) void supabase.removeChannel(ch);

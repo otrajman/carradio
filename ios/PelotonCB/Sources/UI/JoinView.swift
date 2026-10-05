@@ -94,7 +94,7 @@ struct JoinView: View {
                     }
                 }
                 .padding(.top, 12)
-                Text("Everyone who enters the same code hears each other — anywhere, any distance.")
+                Text("Everyone who enters the same code hears each other — anywhere, any distance. Riding alone? Enter DEMO for a sample pack of three riders.")
                     .font(.system(size: 13))
                     .foregroundStyle(PelotonPalette.muted)
                     .padding(.top, 10)

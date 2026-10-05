@@ -183,7 +183,7 @@ fun JoinScreen(
             )
         }
         Text(
-            text = "Everyone who enters the same code hears each other — anywhere, any distance.",
+            text = "Everyone who enters the same code hears each other — anywhere, any distance. Riding alone? Enter DEMO for a sample pack of three riders.",
             fontSize = 13.sp,
             color = c.muted,
             modifier = Modifier.padding(top = 10.dp)

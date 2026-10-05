@@ -168,7 +168,8 @@ function JoinScreen(props: {
       </button>
       <p className="pl-fine">
         Open road: any PelotonCB rider within 500 m heading your way. A pack hears each other
-        at any distance.
+        at any distance. Riding alone? Enter the code <b>DEMO</b> to join a sample pack of
+        three riders.
       </p>
 
       {ROAD_GUIDE && (
@@ -308,7 +309,13 @@ function RideScreen(props: { engine: PelotonEngine; onLeave: () => void }) {
           aria-label={snap.packCode ? "Share pack code" : undefined}
         >
           <span className="pl-eyebrow">
-            {snap.packCode ? (copied ? "Copied · share it" : "Pack · tap to share") : "Open road · 500 m"}
+            {snap.packCode
+              ? engine.isDemo
+                ? "Demo pack · sample riders"
+                : copied
+                  ? "Copied · share it"
+                  : "Pack · tap to share"
+              : "Open road · 500 m"}
           </span>
           <span className={`pl-where-main${snap.packCode ? " mono" : ""}`}>
             {snap.packCode ?? "ANY RIDER NEARBY"}

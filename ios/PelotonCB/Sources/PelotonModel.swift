@@ -51,6 +51,8 @@ final class PelotonModel: ObservableObject {
     private var tripID: UUID?
     private var packTag = PelotonTag.openRoad
     private var isPack = false
+    private var isDemo = false
+    private var demoTask: Task<Void, Never>?
     private var currentGps: GpsState?
     private var ownRoom: String?
     private var mutedTripIDs: Set<String> = []
@@ -93,6 +95,7 @@ final class PelotonModel: ObservableObject {
         guard phase != .starting, phase != .riding else { return }
         let tag = PelotonTag.fromCode(code)
         isPack = tag != nil
+        isDemo = PelotonTag.isDemo(code)
         packTag = tag ?? PelotonTag.openRoad
         packCode = isPack ? code?.trimmingCharacters(in: .whitespaces).uppercased() : nil
         phase = .starting
@@ -121,6 +124,19 @@ final class PelotonModel: ObservableObject {
                     mic = .paused
                     status = "Microphone unavailable"
                 }
+                if isDemo, let id = tripID {
+                    // §16.7: each ping lets the server speak at most one line from the three
+                    // synthetic riders (paced server-side); keep pinging while we're here.
+                    demoTask?.cancel()
+                    demoTask = Task { [weak self] in
+                        while !Task.isCancelled {
+                            await self?.supabase.pingDemoPack(
+                                tripID: id, lat: self?.currentGps?.lat, lng: self?.currentGps?.lng
+                            )
+                            try? await Task.sleep(nanoseconds: 15_000_000_000)
+                        }
+                    }
+                }
             } catch {
                 phase = .failed("Couldn't reach the pack. Check your connection.")
                 NSLog("PelotonCB trip create failed: \(error)")
@@ -129,6 +145,8 @@ final class PelotonModel: ObservableObject {
     }
 
     func leaveRide() {
+        demoTask?.cancel()
+        demoTask = nil
         Task { await realtime.shutdown() }
         vox.stop()
         location.stop()
@@ -204,7 +222,7 @@ final class PelotonModel: ObservableObject {
         realtime.onBurst = { [weak self] payload in self?.handleIncoming(payload) }
         realtime.onPeerCountChange = { [weak self] count in
             guard let self else { return }
-            self.riderCount = count
+            self.riderCount = count + (self.isDemo ? PelotonTag.demoRiders : 0)
             self.nowPlaying.updateNowPlaying(subtitle: "\(count) riding with you — \(self.handle)")
         }
 

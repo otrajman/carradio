@@ -35,6 +35,16 @@ export function openRoadTag(): Promise<string> {
   return sha256Prefix16(`${NAMESPACE}open`);
 }
 
+/** Reserved pack code: never empty — the server seats three synthetic riders (§16.7). */
+export const DEMO_CODE = "DEMO";
+/** sha256("pelotoncb:code:demo")[:16] */
+export const DEMO_TAG = "d8b53d4ecd7e76c4";
+/** Synthetic riders the server seats in the demo pack (clients add them to the roster). */
+export const DEMO_RIDERS = 3;
+export function isDemoCode(code: string | null | undefined): boolean {
+  return normalizePackCode(code ?? "") === "demo";
+}
+
 export function packChannel(tag: string): string {
   return `peloton:pack:${tag}`;
 }

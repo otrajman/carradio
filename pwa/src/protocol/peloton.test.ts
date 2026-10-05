@@ -4,6 +4,8 @@ import { convoyTagFromCode } from "./convoy";
 import { evaluateBurst } from "./filter";
 import { destination } from "./geo";
 import {
+  DEMO_TAG,
+  isDemoCode,
   OPEN_ROAD_TAG,
   cleanRiderName,
   VoxDetector,
@@ -23,6 +25,12 @@ describe("PelotonTag", () => {
   it("matches the cross-platform vectors", async () => {
     expect(await packTagFromCode("HILL-4821")).toBe("0675040865c1d052");
     expect(await openRoadTag()).toBe(OPEN_ROAD_TAG);
+  });
+
+  it("reserves the DEMO pack", async () => {
+    expect(await packTagFromCode("DEMO")).toBe(DEMO_TAG);
+    expect(isDemoCode(" demo ")).toBe(true);
+    expect(isDemoCode("DEMO-1")).toBe(false);
   });
 
   it("normalizes case, spaces and punctuation", async () => {

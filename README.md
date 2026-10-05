@@ -29,6 +29,9 @@ A second app from this codebase: **hands-free group radio for cyclists**, phone 
 - Daylight-first, glove-sized handlebar UI; the screen stays on during a ride.
 - Same backend with no migration: packs ride in the convoy tag under a `pelotoncb:`
   namespace, so Car Radio never hears bikes and vice versa.
+- **Riding alone? Enter `DEMO`**: a reserved pack the server keeps populated with three
+  synthetic riders (Gemini-voiced ride chatter) — for trying the app, and for App Review.
+  PROTOCOL §16.7, `supabase/functions/demo-pack/`.
 
 | | Web (PWA) | Android | iOS |
 |---|---|---|---|

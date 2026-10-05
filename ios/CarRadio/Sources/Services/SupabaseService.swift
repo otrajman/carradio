@@ -222,6 +222,30 @@ final class SupabaseService {
         }
     }
 
+    // MARK: Demo pack (PROTOCOL §16.7)
+
+    private struct DemoPackRequest: Encodable {
+        let trip_id: String
+        let lat: Double?
+        let lng: Double?
+    }
+
+    private struct DemoPackResponse: Decodable {
+        let ok: Bool?
+    }
+
+    /// Keeps the reserved DEMO pack populated with synthetic riders while this trip is in it.
+    func pingDemoPack(tripID: String, lat: Double?, lng: Double?) async {
+        do {
+            let _: DemoPackResponse = try await client.functions.invoke(
+                Constants.demoPackFunction,
+                options: FunctionInvokeOptions(body: DemoPackRequest(trip_id: tripID, lat: lat, lng: lng))
+            )
+        } catch {
+            NSLog("PelotonCB demo-pack failed: \(error)")
+        }
+    }
+
     // MARK: Synthetic nodes (PROTOCOL §12)
 
     private struct SyntheticBody: Encodable {

@@ -90,6 +90,8 @@ class PelotonService : Service() {
     private val sendMutex = Mutex()
     private var packTag: String = PelotonTag.OPEN_ROAD
     private var isPack = false
+    private var isDemo = false
+    private var demoJob: Job? = null
     private var lastFix: LocationEngine.Fix? = null
     private var started = false
     private var paused = false
@@ -133,6 +135,7 @@ class PelotonService : Service() {
                 val code = intent?.getStringExtra(EXTRA_PACK_CODE)
                 val tag = PelotonTag.fromCode(code)
                 isPack = tag != null
+                isDemo = PelotonTag.isDemo(code)
                 packTag = tag ?: PelotonTag.OPEN_ROAD
                 riderName = RiderName.clean(intent?.getStringExtra(EXTRA_RIDER_NAME))
                 goForeground()
@@ -238,11 +241,22 @@ class PelotonService : Service() {
                 selfTripId = { tripId },
                 selfHandle = { handle },
                 onBurst = { payload -> handleIncomingBurst(payload) },
-                onRiderCountChanged = { refreshNotification() }
+                onRiderCountChanged = { refreshNotification() },
+                extraRiders = if (isDemo) PelotonTag.DEMO_RIDERS else 0
             )
             locationEngine = LocationEngine(this@PelotonService, scope, useFakeRoute = false) { fix ->
                 onFix(fix)
             }.also { it.start() }
+            if (isDemo) {
+                // §16.7: each ping lets the server speak at most one line from the three
+                // synthetic riders (paced server-side); keep pinging while we're here.
+                demoJob = scope.launch {
+                    while (isActive) {
+                        tripId?.let { repository.pingDemoPack(it, lastFix?.lat, lastFix?.lng) }
+                        delay(DEMO_PING_MS)
+                    }
+                }
+            }
             startMic()
         }
     }
@@ -591,6 +605,7 @@ class PelotonService : Service() {
 
     @OptIn(DelicateCoroutinesApi::class)
     override fun onDestroy() {
+        demoJob?.cancel()
         vox?.stop()
         locationEngine?.stop()
         val ch = channels
@@ -611,6 +626,7 @@ class PelotonService : Service() {
         private const val TAG = "PelotonService"
         private const val NOTIFICATION_ID = 42
         private const val TURN_RELEASE_DELAY_MS = 350L
+        private const val DEMO_PING_MS = 15_000L
         /** A chunk of the same phrase follows within this long of the previous one ending. */
         private const val CONTINUATION_GAP_MS = 2_000L
         /** §16.6: quiet time before a local AI comment may fill the silence. */

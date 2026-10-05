@@ -24,6 +24,12 @@ public enum PelotonTag {
         return ConvoyTag.fromCode(namespace + "code:" + normalized)
     }
 
+    /// Reserved pack code: never empty — the server seats three synthetic riders (§16.7).
+    public static let demoCode = "DEMO"
+    /// Synthetic riders the server seats in the demo pack (added to the roster client-side).
+    public static let demoRiders = 3
+    public static func isDemo(_ code: String?) -> Bool { normalizeCode(code ?? "") == "demo" }
+
     /// Tag shared by every rider in open-road (geo) mode.
     public static let openRoad: String = ConvoyTag.fromCode(namespace + "open")!
 
