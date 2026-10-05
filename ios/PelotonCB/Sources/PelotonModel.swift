@@ -131,7 +131,7 @@ final class PelotonModel: ObservableObject {
                     demoTask = Task { [weak self] in
                         while !Task.isCancelled {
                             await self?.supabase.pingDemoPack(
-                                tripID: id, lat: self?.currentGps?.lat, lng: self?.currentGps?.lng
+                                tripID: id.uuidString.lowercased(), lat: self?.currentGps?.lat, lng: self?.currentGps?.lng
                             )
                             try? await Task.sleep(nanoseconds: 15_000_000_000)
                         }
