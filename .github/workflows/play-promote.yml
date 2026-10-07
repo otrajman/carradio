@@ -1,0 +1,26 @@
+name: Play — promote a build to a track
+
+on:
+  workflow_dispatch:
+    inputs:
+      package:
+        description: Package name
+        default: com.pelotoncb.app
+      track:
+        description: "Play track (beta = open testing, alpha = closed, production)"
+        default: beta
+      versionCode:
+        description: Version code already uploaded (the CI run number)
+        required: true
+
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: npm i --no-save google-auth-library@9 >/dev/null
+      - env:
+          PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+        run: node .github/scripts/play-promote.mjs "${{ inputs.package }}" "${{ inputs.track }}" "${{ inputs.versionCode }}"

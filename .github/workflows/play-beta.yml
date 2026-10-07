@@ -1,4 +1,4 @@
-name: Play — internal testing upload
+name: Play — internal upload (+ PelotonCB open testing)
 
 on:
   push:
@@ -96,5 +96,15 @@ jobs:
           releaseFiles: android/app/build/outputs/bundle/pelotonRelease/app-peloton-release.aab
           track: internal
           status: completed
+      - name: Promote to open testing (beta track)
+        # Same bundle, straight to the public opt-in link on pelotoncb.com. Google reviews
+        # open-testing releases; a rejection shows up as a failed commit here.
+        if: ${{ env.HAVE_PLAY_KEY == 'true' }}
+        working-directory: .
+        env:
+          PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+        run: |
+          npm i --no-save google-auth-library@9 >/dev/null
+          node .github/scripts/play-promote.mjs com.pelotoncb.app beta ${{ github.run_number }}
     env:
       HAVE_PLAY_KEY: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON != '' }}
