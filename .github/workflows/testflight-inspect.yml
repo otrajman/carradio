@@ -1,0 +1,20 @@
+name: TestFlight — inspect groups (read-only)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - name: Beta groups, public links, latest builds
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          P8_BASE64: ${{ secrets.ASC_KEY_P8_BASE64 }}
+        run: |
+          export ASC_KEY_P8="$(echo "$P8_BASE64" | base64 --decode)"
+          node .github/scripts/testflight-inspect.mjs
